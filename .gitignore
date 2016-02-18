@@ -1,0 +1,7 @@
+.vs
+Debug
+Release
+hello.txt
+test001.bin
+*.opendb
+*.sdf
