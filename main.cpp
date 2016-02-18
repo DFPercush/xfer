@@ -3,17 +3,8 @@
 // Can be overridden by the -p option at run time
 #define DEFAULT_PORT 50420
 
-// Maximum transmission unit
-// The maximum number of bytes that can be sent over the network
-// in a single packet.
-// This value takes into account up to 100 octets of headers.
-#define DEFAULT_MTU 1400
-
-#define DEFAULT_BUFFER_SIZE 0x4000
-
 #include <sys/types.h>
 #ifdef WIN32
-//#include <Winsock.h>
 #include <Ws2tcpip.h>
 #else
 #include <socket.h>
@@ -26,26 +17,9 @@
 
 #include "SocketStreamBuffer.h"
 
-//#include <boost/asio.hpp>
-//using boost::asio::ip::tcp;
-//boost::asio::
-//tcp::socket
-typedef long long bigint;
-
-
-class MessageBuffer
+class ProgramOptions
 {
 public:
-	std::mutex m;
-	std::list<std::string> messages;
-};
-
-class ProgramOptions
-{	
-public:
-	int mtu;
-	int bufferSize;
-
 	unsigned short port;
 
 	int listen : 1;
@@ -63,10 +37,9 @@ public:
 		listen = 0;
 		serve = 0;
 		useFileList = 0;
+		verbose = 0;
 		remote = nullptr;
 		port = DEFAULT_PORT;
-		mtu = DEFAULT_MTU;
-		bufferSize = DEFAULT_BUFFER_SIZE;
 	}
 };
 
@@ -78,66 +51,6 @@ bool isIntString(const char* s)
 	if (!strcmp(s, testOut)) { return true; }
 	else { return false; }
 }
-
-/*************************************************************************************
-addrinfo* lookup(const std::string& str)
-{
-	//union {
-	//	sockaddr raw;
-	//	sockaddr_in ip4;
-	//	//sockaddr_in6 ip6;
-	//} ret;
-	int dots[3];
-	unsigned char ip4addr[4]; // Will be stored big endian in this arrangement
-	//unsigned char ip6addr[6];
-	bool ip4 = true;
-	bool ip6 = false;
-
-	dots[0] = str.find_first_of('.', 0);
-	if (dots[0] > 0) { dots[1] = str.find_first_of('.', dots[0] + 1); }
-	else { ip4 = false; }
-	if (ip4 && dots[1] > 0) { dots[2] = str.find_first_of('.', dots[1] + 1); }
-	else { ip4 = false; }
-	if (ip4 && dots[2] > 0)
-	{
-		int testVals[4];
-		std::string subs[4];
-		subs[0] = str.substr(0, dots[0]);
-		subs[1] = str.substr(dots[0] + 1, dots[1] - dots[0] - 1);
-		subs[2] = str.substr(dots[1] + 1, dots[2] - dots[1] - 1);
-		subs[3] = str.substr(dots[2] + 1, str.length() - dots[2] - 1);
-		if (isIntString(subs[0].c_str()) &&
-			isIntString(subs[1].c_str()) &&
-			isIntString(subs[2].c_str()) &&
-			isIntString(subs[3].c_str()))
-		{
-			for (int i = 0; i < 4; i++)
-			{
-				testVals[i] = atoi(subs[i].c_str());
-				if (testVals[i] < 0 || testVals[i] > 255)
-				{
-					ip4 = false;
-					break;
-				}
-				ip4addr[i] = (unsigned char)testVals[i];
-			}
-		}
-		else { ip4 = false; }
-
-	}
-	else { ip4 = false; }
-
-	addrinfo* result;
-	if (!ip4)
-	{
-		// argument is a domain or host name
-		//auto host = gethostbyname(str.c_str());
-		//host->
-		getaddrinfo(str.c_str(), nullptr, nullptr, &result);
-	}
-	return result;
-}
-****************************************************************************/
 
 char usageString[] = 
 "Usage: xfer [options] [files]\n"
@@ -164,7 +77,11 @@ ProgramOptions parseCmd(int argc, char** argv)
 	for (int i = 1; i < argc; i++)
 	{
 		lastProcessedArg = i;
-		if (!strcmp(argv[i], "--")) { break; }
+		if (!strcmp(argv[i], "--")) 
+		{
+			lastProcessedArg++;
+			break; 
+		}
 		else if (!strcmp(argv[i], "-s"))
 		{
 			op.serve = 1;
@@ -234,42 +151,22 @@ ProgramOptions parseCmd(int argc, char** argv)
 				throw "-c requires an address to connect";
 			}
 		}
-		else if (!strcmp(argv[i], "--")) 
-		{
-			i++;
-			break; 
-		}
-		else if (!strcmp(argv[i], "--mtu"))
-		{
-			i++;
-			if (i < argc)
-			{
-				if (isIntString(argv[i]))
-				{
-					op.mtu = atoi(argv[i]);
-				}
-				else
-				{
-					throw "--mtu requires an integer size";
-				}
-			}
-			else
-			{
-				throw "--mtu requires a size";
-			}
-		}
 		else if (!strcmp(argv[i], "-v") || !strcmp(argv[i], "--verbose"))
 		{
 			op.verbose = true;
 		}
 		///////////////////////////////////////////////////////////////////////////////
 		// Insert new commands here (above plz)
-		//else if (argv[i][0] == '-')
-		//{
-		//	std::string emsg = "Unknown option ";
-		//	emsg += argv[i];
-		//	throw emsg.c_str();
-		//}
+		else if (argv[i][0] == '-')
+		{
+			fprintf(stderr, "Warning: %s looks like an option directive, but is not recognized. Treating as file name.\n", argv[i]);
+			op.files.push_back(argv[i]);
+		}
+		else
+		{
+			op.files.push_back(argv[i]);
+		}
+		lastProcessedArg = i + 1;
 	}
 	if (op.useFileList)
 	{
@@ -304,17 +201,10 @@ bool sendFiles(SOCKET s, const ProgramOptions& op)
 
 
 			std::string fileHeader;
-			//fileHeader = "FilenameLength:";
-			//ss << fn.length();
-			//ss >> numstr;
-			//fileHeader += numstr;
-			//fileHeader += (char)0x0A;
 
 			fileHeader += "Filename:" + fn;
 			fileHeader += (char)0x0A;
 			fileHeader += "Size:";
-			//char numbuf[30];
-			//sprintf_s<30>(numbuf, "%)
 			ss << fs.st_size;
 			ss >> numstr;
 			fileHeader += numstr;
@@ -351,98 +241,6 @@ bool sendFiles(SOCKET s, const ProgramOptions& op)
 	if (op.verbose)
 	{
 		printf("Wrote end of stream.\n");
-	}
-	return true;
-}
-
-
-bool sendFiles_x(SOCKET s, const ProgramOptions& op)
-{
-	//expects a connected socket
-	int bufferSize = op.bufferSize;
-	int bufferReads;
-	char* buffer = nullptr;
-	int mtu = op.mtu;
-	int sendResult;
-
-	if (mtu <= 0)
-	{
-		mtu = DEFAULT_MTU;
-		bufferReads = DEFAULT_BUFFER_SIZE / DEFAULT_MTU;
-	}
-	else
-	{
-		if (bufferSize < mtu) { bufferSize = mtu; }
-		bufferReads = bufferSize / op.mtu;
-		buffer = new char[bufferSize];
-	}
-	if (!buffer) return false;
-
-	if (op.useFileList)
-	{
-		for (auto fn : op.files)
-		{
-			std::stringstream ss;
-			std::string numstr;
-			struct stat fs;
-			FILE* f;
-			stat(fn.c_str(), &fs);
-			fopen_s(&f, fn.c_str(), "rb");
-			if (!f)
-			{
-				fprintf(stderr, "File not found: %s\n", fn.c_str());
-			}
-
-			
-			std::string fileHeader;
-			//fileHeader = "FilenameLength:";
-			//ss << fn.length();
-			//ss >> numstr;
-			//fileHeader += numstr;
-			//fileHeader += (char)0x0A;
-
-			fileHeader += "Filename:" + fn;
-			fileHeader += (char)0x0A;
-			fileHeader += "Size:";
-			//char numbuf[30];
-			//sprintf_s<30>(numbuf, "%)
-			ss << fs.st_size;
-			ss >> numstr;
-			fileHeader += numstr;
-			fileHeader += (char)0x0A;
-			fileHeader += (char)0x0A;
-
-			// TODO: send may send less data than you tell it to, need to buffer that
-			sendResult = send(s, fileHeader.c_str(), fileHeader.length(), 0);
-			// The "let the os handle buffering" strategy
-			while (!feof(f))
-			{
-				auto nr = fread(buffer, 1, bufferSize, f);
-				sendResult = send(s, buffer, nr, 0);
-			}
-
-			fclose(f);
-			printf("Success: %s\n", fn.c_str());
-		}
-	}
-	else
-	{
-		std::string fileHeader;
-		if (op.destFilename == "")
-		{
-			fileHeader = "xfer.bin";
-		}
-		else
-		{
-			fileHeader = op.destFilename;
-		}
-		fileHeader += (char)0x0A;
-		fileHeader += (char)0x0A;
-		while (!feof(stdin))
-		{
-			auto nr = fread(buffer, 1, bufferSize, stdin);
-			send(s, buffer, nr, 0);
-		}
 	}
 	return true;
 }
@@ -538,131 +336,6 @@ bool receiveFiles(SOCKET s, const ProgramOptions& op)
 	return true;
 }
 
-bool receiveFiles_x(SOCKET s, const ProgramOptions& op)
-{
-	//expects a connected socket
-	int bufferSize;
-	if (op.bufferSize <= 0) { bufferSize = 0x2000; }
-	else { bufferSize = op.bufferSize; }
-	char* buffer = new char[bufferSize];
-	std::string line;
-	std::stringstream lineStream, numstream;
-	FILE* f = nullptr;
-	struct {
-		std::string name;
-		off_t size;
-	} fileInfo;
-	fileInfo.name = "";
-	fileInfo.size = 0;
-	int rn = 1;
-	int leftover = 0;
-	off_t w; // number of bytes written for a particular file
-	while (rn > 0)
-	{
-		w = 0;
-		//while (rn = recv(s, buffer, bufferSize, 0))
-		while ([&]() -> bool 
-			{
-				if (leftover == 0)
-				{
-					rn = recv(s, buffer, bufferSize, 0);
-					if (rn > 0) { return true; }
-					else { return false; }
-				}
-				else
-				{
-					int destPos = 0;
-					int tempNewRn = rn - leftover;
-					// Slow memcpy, must be direction safe, but probably faster than network anyway.
-					while (leftover < rn)
-					{
-						buffer[destPos++] = buffer[leftover++];
-					}
-					leftover = 0;
-					rn = tempNewRn;
-					return true;
-				}
-			}())
-		{
-			line = "";
-			for (int p = 0; p < rn; p++)
-			{
-				if (buffer[p] == 0x0D) {} // ignore CR
-				if (buffer[p] == 0x0A) // Parse LF
-				{
-					lineStream.write(buffer, p);
-					//lineStream.read(lineStream.getline())
-					std::getline(lineStream, line);
-					lineStream.clear();
-					int pColon = line.find(':');
-					if (pColon > 0)
-					{
-						std::string k, v;
-						k = line.substr(0, pColon);
-						v = line.substr(pColon + 1, line.length() - pColon - 1);
-						if (k == "Filename")
-						{
-							fileInfo.name = v;
-						}
-						else if (k == "Size")
-						{
-							numstream.clear();
-							numstream << v;
-							numstream >> fileInfo.size;
-						}
-					}
-					else if (line == "")
-					{
-						// Beginning of data
-						fopen_s(&f, fileInfo.name.c_str(), "wb");
-						if (!f)
-						{
-							fprintf(stderr, "Could not open file for writing: %s\n", fileInfo.name.c_str());
-							fileInfo.size = 0;
-						}
-						else
-						{
-							w = rn - p - 1;
-							if (fileInfo.size < w) 
-							{
-								leftover = w - fileInfo.size;
-								w = fileInfo.size;
-							}
-							fwrite(&(buffer[p + 1]), 1, w, f);
-							//if (leftover)
-							//{
-							//	lineStream.clear();
-							//}
-						}
-						break;
-					}
-				}
-				else
-				{
-					lineStream.write(buffer, rn);
-				}
-			}
-		}
-
-		while ((w < fileInfo.size) && (rn = recv(s, buffer, bufferSize, 0)))
-		{
-			if (w + rn > fileInfo.size)
-			{
-				fwrite(buffer, 1, fileInfo.size - w, f);
-				w = fileInfo.size;
-			}
-			else
-			{
-				fwrite(buffer, 1, rn, f);
-				w += rn;
-			}
-		}
-		if (f) { fclose(f); }
-		f = nullptr;
-	}
-	return true;
-}
-
 int submain(int argc, char** argv)
 {
 	if (argc < 2)
@@ -673,9 +346,6 @@ int submain(int argc, char** argv)
 #ifdef WIN32
 	WSADATA winsockStartupInfo;
 	WSAStartup(0x0101, &winsockStartupInfo);
-	char curDir[MAX_PATH];
-	GetCurrentDirectoryA(MAX_PATH, curDir);
-	printf("Current directory is %s\n", curDir);
 #endif
 
 	ProgramOptions op;
@@ -688,6 +358,15 @@ int submain(int argc, char** argv)
 		fprintf(stderr, "%s\n", s);
 		return 1;
 	}
+
+#ifdef WIN32	
+	if (op.verbose)
+	{
+		char curDir[MAX_PATH];
+		GetCurrentDirectoryA(MAX_PATH, curDir);
+		printf("Current directory is %s\n", curDir);
+	}
+#endif
 
 	if (op.listen)
 	{
