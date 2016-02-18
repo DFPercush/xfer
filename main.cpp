@@ -43,6 +43,17 @@ public:
 	}
 };
 
+std::string filenameOnly(const std::string& fullpath)
+{
+	int start = 0;
+	int f = fullpath.find_last_of('/');
+	int b = fullpath.find_last_of('\\');
+	if (f == b && b == std::string::npos) { return fullpath; }
+	start = (f > b) ? f : b;
+	start++;
+	return fullpath.substr(start, fullpath.length() - start);
+}
+
 bool isIntString(const char* s)
 {
 	char testOut[30];
@@ -202,7 +213,7 @@ bool sendFiles(SOCKET s, const ProgramOptions& op)
 
 			std::string fileHeader;
 
-			fileHeader += "Filename:" + fn;
+			fileHeader += "Filename:" + filenameOnly(fn);
 			fileHeader += (char)0x0A;
 			fileHeader += "Size:";
 			ss << fs.st_size;
@@ -321,7 +332,7 @@ bool receiveFiles(SOCKET s, const ProgramOptions& op)
 				v = line.substr(colonPos + 1, line.length() - colonPos - 1);
 				if (k == "Filename")
 				{
-					fname = v;
+					fname = filenameOnly(v);
 				}
 				else if (k == "Size")
 				{
@@ -338,6 +349,7 @@ bool receiveFiles(SOCKET s, const ProgramOptions& op)
 
 int submain(int argc, char** argv)
 {
+
 	if (argc < 2)
 	{
 		usage();
