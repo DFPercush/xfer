@@ -246,6 +246,7 @@ bool sendFiles(SOCKET s, const ProgramOptions& op)
 				}
 				sent += nr;
 			}
+			fclose(f);
 		}
 	}
 	b.write("(end)\n", 6);
@@ -307,6 +308,7 @@ bool receiveFiles(SOCKET s, const ProgramOptions& op)
 					}
 					fwrite(buf, 1, nr, f);
 				}
+				fclose(f);
 			}
 			else
 			{

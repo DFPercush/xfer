@@ -40,3 +40,4 @@ be sent. There is no way for a receiver/peer to request a certain file.
 
 The transfer mode is always binary. No newline conversions are present. The headers use a single LF.
 
+If you get missing DLL errors on Windows binary, please install the Visual C++ runtime from https://www.microsoft.com/en-us/download/details.aspx?id=48145
