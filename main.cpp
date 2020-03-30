@@ -22,6 +22,9 @@
 #pragma warning(disable:4996)
 #endif
 
+const char* xferVersionStr = "xfer_v0.0.2";
+const off_t FileChunkSize = 0x400;
+
 class ProgramOptions
 {
 public:
@@ -195,7 +198,7 @@ ProgramOptions parseCmd(int argc, char** argv)
 }
 
 
-bool sendFiles(SOCKET s, const ProgramOptions& op)
+bool x2_sendFiles(SOCKET s, const ProgramOptions& op)
 {
 	char buf[0x1000];
 	struct stat fs;
@@ -298,7 +301,7 @@ bool x_sendFiles(SOCKET s, const ProgramOptions& op)
 	return true;
 }
 
-bool receiveFiles(SOCKET s, const ProgramOptions& op)
+bool x2_receiveFiles(SOCKET s, const ProgramOptions& op)
 {
 	char rbuf[0x1000];
 	int nread = 1;
@@ -471,6 +474,142 @@ bool x_receiveFiles(SOCKET s, const ProgramOptions& op)
 		}
 	}
 	return true;
+}
+
+bool sendFiles(SOCKET sock, ProgramOptions op)
+{
+	SecureSocketStream s(sock, op.listen);
+	if (!s.valid()) { return false; }
+	char fileBuf[FileChunkSize];
+	unsigned char shamd[SHA256_DIGEST_LENGTH];
+
+	SHA256_CTX shacx;
+
+	s << xferVersionStr << "\n";
+	struct stat st;
+	FILE* f;
+	for (auto filename : op.files)
+	{
+		if (stat(filename.c_str(), &st))
+		{
+			fprintf(stderr, "Failed to get file information for %s\n", filename.c_str());
+			return false;
+		}
+		f = fopen(filename.c_str(), "rb");
+		if (!f) 
+		{
+			fprintf(stderr, "Could not open %s\n", filename.c_str());
+			return false;
+		}
+
+		SHA256_Init(&shacx);
+
+		s << st.st_size << filename << "\n";
+		off_t toSend;
+		off_t nreadBuf;
+		for (off_t fpos = 0; fpos < st.st_size; fpos += nreadBuf)
+		{
+			toSend = FileChunkSize;
+			if (toSend > st.st_size - fpos) { toSend = st.st_size - fpos; }
+			nreadBuf = (off_t) fread(fileBuf, 1, FileChunkSize, f);
+			if (nreadBuf <= 0)
+			{
+				fprintf(stderr, "File read error: %s", filename.c_str());
+				return false;
+			}
+			SHA256_Update(&shacx, fileBuf, nreadBuf);
+			if (s.write(fileBuf, nreadBuf) <= 0)
+			{
+				fprintf(stderr, "Socket write error\n");
+				return false;
+			}
+		}
+
+		SHA256_Final(shamd, &shacx);
+		if (s.write(shamd, SHA256_DIGEST_LENGTH) <= 0)
+		{
+			fprintf(stderr, "Socket write error\n");
+			return false;
+		}
+	}
+	s << "0 <END>\n";
+	s.close();
+	return true;
+}
+
+bool receiveFiles(SOCKET sock, ProgramOptions op)
+{
+	SecureSocketStream s(sock, op.listen);
+	if (!s.valid()) { return false; }
+
+	std::string verStr;
+	s.getline(verStr);
+	if (verStr != xferVersionStr)
+	{
+		fprintf(stderr, "Error: Transfer protocol version mismatch.\n");
+		return false;
+	}
+
+	std::string filename;
+	off_t fileSize;
+	SHA256_CTX shacx;
+	FILE* f;
+	unsigned char shamdHere[SHA256_DIGEST_LENGTH];
+	unsigned char shamdThere[SHA256_DIGEST_LENGTH];
+	unsigned char fileBuf[FileChunkSize];
+
+	while (!s.eos())
+	{
+		s >> fileSize;
+		if (!s.getline(filename))
+		{
+			fprintf(stderr, "Failed to read file name.\n");
+			return false;
+		}
+		if (filename == "<END>" && fileSize == 0)
+		{
+			s.close();
+			printf("All done!\n");
+			return true;
+		}
+
+		off_t nreadCum = 0;
+		int nread;
+		int toRead;
+		f = fopen(filename.c_str(), "wb");
+		if (!f)
+		{
+			s.close();
+			fprintf(stderr, "Could not open %s\n", filename.c_str());
+			return false;
+		}
+		SHA256_Init(&shacx);
+		while (nreadCum < fileSize && !s.eos())
+		{
+			if (fileSize - nreadCum < FileChunkSize) { toRead = fileSize - nreadCum; }
+			else { toRead = FileChunkSize; }
+			nread = s.readAnySize(fileBuf, toRead);
+			if (nread <= 0)
+			{
+				break;
+			}
+			SHA256_Update(&shacx, fileBuf, nread);
+
+			nreadCum += nread;
+		}
+		if (s.eos()) { break; }
+		fclose(f);
+		s.read(shamdThere, SHA256_DIGEST_LENGTH);
+		SHA256_Final(shamdHere, &shacx);
+		if (memcmp(shamdHere, shamdThere, SHA256_DIGEST_LENGTH))
+		{
+			fprintf(stderr, "Warning, data integrity violation, bad hash: %s\n", filename.c_str());
+			fprintf(stderr, "    ...Adding .err to file name\n");
+			rename(filename.c_str(), (filename + ".err").c_str());
+		}
+	}
+	fprintf(stderr, "Error: Reached end of stream without an END marker from sender.\n");
+	return false;
 }
 
 int submain(int argc, char** argv)

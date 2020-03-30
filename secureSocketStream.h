@@ -19,6 +19,12 @@
 //#include <openssl/bio.h>
 
 
+#define SecureSocketStream_DHPrimeModBits 1024
+#define SecureSocketStream_HandshakeVersion 2
+#define SecureSocketStream_SocketBufferSize 0X1000
+
+
+
 union EndianTest_t
 {
 	short s;
@@ -116,21 +122,35 @@ public:
 
 	template<typename T> SecureSocketStream& operator << (const T& thingToSend);
 	template<typename T> SecureSocketStream& operator >> (T& thingToRecv);
+
+	int readAnySize(void* buffer, int maxSize);
+	int readFixedSize(void* buffer, int size);
+	int read(void* buffer, int size) { return readFixedSize(buffer, size); }
+	int write(const void* buffer, int size);
+
+	bool getline(std::string& outstr);
 	// TODO: getline()
 	void close();
-
+	bool eos();
+	bool eof() { return eos(); }
 private:
-
-	static const int CryptoPrimeModBits;
 
 	void init();
 	bool handshakeServer();
 	bool handshakeClient();
 	bool fail();
 	bool initCipher(BIGNUM* key, unsigned char* iv);
+	int sendLoop(const void* buffer, int size);
+	int sendLoop(const char* c_str); // Does not send null terminator
+	bool recvFixedBuffer(SOCKET sock, void* dest, int len);
+
+	// Members vars
 	bool _valid;
+	bool _eos;
 	SOCKET sock;
 	std::stringstream ss;
+	unsigned char* recvBuffer;
+	unsigned char* sendBuffer;
 
 	// Diffie-Hellman params
 	BN_CTX* bignumContext;
@@ -140,20 +160,58 @@ private:
 	BIGNUM* myPreKey;
 	BIGNUM* remoteExchangeKey;
 	BIGNUM* skey;
+
+	// Chacha20 stream cipher objects
 	EVP_CIPHER_CTX* sendCipher;
 	EVP_CIPHER_CTX* recvCipher;
 };
 
 template<typename T> SecureSocketStream& SecureSocketStream::operator << (const T& thingToSend)
 {
-	// TODO: This
+	ss << thingToSend;
+	std::string s(ss.str());
+	write(s.c_str(), (int)s.length());
+	ss.clear();
 	return *this;
 }
 
 template<typename T> SecureSocketStream& SecureSocketStream::operator >> (T& thingToRecv)
 {
-	//TODO: this
 	// Need to receive enough to encounter whitespace after item
+
+	auto ssLen = ss.tellp();
+	std::string s3;
+	char rbuf[SecureSocketStream_SocketBufferSize];
+	int nread;
+	int w1, w2, nw;
+	const char* whitespace = " \t\r\n\0";
+	while (true)
+	{
+		ssLen = ss.tellp();
+		if (ssLen > 0)
+		{
+			s3 = ss.str();
+			w1 = (int)s3.find_first_of(whitespace);
+			if (w1 == std::string::npos) { goto readMore; } // yeah, I know
+			nw = (int)s3.find_first_not_of(whitespace);
+			if (nw == std::string::npos) { goto readMore; }
+			if (w1 < nw)
+			{
+				w2 = (int)s3.find_first_of(whitespace, nw);
+				if (w2 == std::string::npos) { goto readMore; }
+			}
+			ss >> thingToRecv;
+			return *this;
+		}
+	readMore:
+		nread = readAnySize(rbuf, SecureSocketStream_SocketBufferSize);
+		if (nread <= 0)
+		{
+			fail();
+			return *this;
+		}
+		ss.write(rbuf, nread);
+	}
 	return *this;
 }
 
