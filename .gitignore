@@ -5,3 +5,5 @@ hello.txt
 test001.bin
 *.opendb
 *.sdf
+*.dll
+

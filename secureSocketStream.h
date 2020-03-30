@@ -1,0 +1,159 @@
+#pragma once
+
+// This is NOT a standard TLS implementation, it's a custom format that has some similarities, but
+// does not respect any standardized format. Connections must use this class on both ends.
+// A https server, for example, won't be able to talk to this.
+// Uses a Diffie-Hellman key exchange handshake to obtain a symmetric cipher key.
+
+#include <sys/types.h>
+#ifdef _WIN32
+#include <Ws2tcpip.h>
+#else
+#include <socket.h>
+#include <netdb.h>
+#endif
+
+#include <sstream>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+//#include <openssl/bio.h>
+
+
+union EndianTest_t
+{
+	short s;
+	struct
+	{
+		char ofs0;
+		char ofs1;
+	};
+};
+
+constexpr bool BigEndianSystem()
+{
+	EndianTest_t u{1};
+	return (u.ofs1 != 0);
+}
+
+constexpr bool LittleEndianSystem()
+{
+	EndianTest_t u{1};
+	return (u.ofs0 != 0);
+}
+
+class nshort
+{
+public:
+	nshort& operator=(short n) { val = htons(n); return *this; }
+	operator short() { return ntohs(val); }
+private:
+	short val;
+};
+
+class unshort
+{
+public:
+	unshort& operator=(unsigned short n) { val = htons(n); return *this; }
+	operator unsigned short() { return ntohs(val); }
+private:
+	unsigned short val;
+};
+
+class nlong
+{
+public:
+	nlong& operator=(long n) { val = htonl(n); return *this; }
+	operator long() { return ntohl(val); }
+private:
+	long val;
+};
+
+class unlong
+{
+public:
+	unlong& operator=(unsigned long n) { val = htonl(n); return *this; }
+	operator unsigned long() { return ntohl(val); }
+private:
+	unsigned long val;
+};
+
+
+class SecureSocketStream
+{
+public:
+	struct ListenFlagType {};
+	static ListenFlagType LISTEN;
+
+	struct HandshakeHeader
+	{
+		unlong sizeOfThisStruct;
+		unlong version;
+		unlong publicModSizeOctets;
+		unlong publicBaseSizeOctets;
+		unlong preKeySizeOctets;
+		unsigned char chachaIV[8];
+		// The BIGNUM buffers should be longer than necessary
+		// For 1024-bit numbers only 128 bytes is necessary, but to allow for future expansion and such,
+		// 0x400 = 1024 bytes will allow 8192-bit numbers.
+		// The number is stored at the beginning of the buffer and runs for the number of bytes/octets
+		// indicated in the *SizeOctets members.
+		unsigned char publicMod[0x400];
+		unsigned char publicBase[0x400];
+		unsigned char preKey[0x400];
+	};
+
+	SecureSocketStream();
+	SecureSocketStream(SOCKET s, bool iAmServer);
+	//SecureSocketStream(const char* host);
+	//SecureSocketStream(const char* host, int port);
+	//SecureSocketStream(const std::string& host);
+	//SecureSocketStream(const std::string& host, int port);
+	//SecureSocketStream(ListenFlagType L, int port);
+	~SecureSocketStream();
+
+	bool begin(SOCKET s, bool iAmServer);
+	bool valid();
+
+	template<typename T> SecureSocketStream& operator << (const T& thingToSend);
+	template<typename T> SecureSocketStream& operator >> (T& thingToRecv);
+	// TODO: getline()
+	void close();
+
+private:
+
+	static const int CryptoPrimeModBits;
+
+	void init();
+	bool handshakeServer();
+	bool handshakeClient();
+	bool fail();
+	bool initCipher(BIGNUM* key, unsigned char* iv);
+	bool _valid;
+	SOCKET sock;
+	std::stringstream ss;
+
+	// Diffie-Hellman params
+	BN_CTX* bignumContext;
+	BIGNUM* publicBase;
+	BIGNUM* publicMod;
+	BIGNUM* mySecret;
+	BIGNUM* myPreKey;
+	BIGNUM* remoteExchangeKey;
+	BIGNUM* skey;
+	EVP_CIPHER_CTX* sendCipher;
+	EVP_CIPHER_CTX* recvCipher;
+};
+
+template<typename T> SecureSocketStream& SecureSocketStream::operator << (const T& thingToSend)
+{
+	// TODO: This
+	return *this;
+}
+
+template<typename T> SecureSocketStream& SecureSocketStream::operator >> (T& thingToRecv)
+{
+	//TODO: this
+	// Need to receive enough to encounter whitespace after item
+	return *this;
+}
+

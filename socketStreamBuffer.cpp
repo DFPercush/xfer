@@ -40,8 +40,8 @@ SocketStreamBuffer::~SocketStreamBuffer()
 {
 	if (readBuffers[0].ptr != nullptr) { delete[] readBuffers[0].ptr; }
 	readBuffers[0].ptr = nullptr;
-	readBuffers[1].ptr = nullptr;
 	if (readBuffers[1].ptr != nullptr) { delete[] readBuffers[1].ptr; }
+	readBuffers[1].ptr = nullptr;
 #ifdef WIN32
 	closesocket(s);
 #else

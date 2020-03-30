@@ -13,7 +13,7 @@ The destructor closes the socket.
 #define SocketStreamBuffer_h
 
 #include <sys/types.h>
-#ifdef WIN32
+#if defined(WIN32) || defined(_WIN32)
 //#include <Winsock.h>
 #include <Ws2tcpip.h>
 #else
@@ -22,6 +22,10 @@ The destructor closes the socket.
 #endif
 
 #include <sstream>
+
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#include <openssl/bio.h>
 
 
 

@@ -4,7 +4,7 @@
 #define DEFAULT_PORT 50420
 
 #include <sys/types.h>
-#ifdef WIN32
+#ifdef _WIN32
 #include <Ws2tcpip.h>
 #else
 #include <socket.h>
@@ -16,6 +16,11 @@
 #include <sstream>
 
 #include "SocketStreamBuffer.h"
+#include "secureSocketStream.h"
+
+#ifdef _MSC_VER
+#pragma warning(disable:4996)
+#endif
 
 class ProgramOptions
 {
@@ -45,9 +50,9 @@ public:
 
 std::string filenameOnly(const std::string& fullpath)
 {
-	int start = 0;
-	int f = fullpath.find_last_of('/');
-	int b = fullpath.find_last_of('\\');
+	size_t start = 0;
+	size_t f = fullpath.find_last_of('/');
+	size_t b = fullpath.find_last_of('\\');
 	if (f == b && b == std::string::npos) { return fullpath; }
 	start = (f > b) ? f : b;
 	start++;
@@ -192,6 +197,42 @@ ProgramOptions parseCmd(int argc, char** argv)
 
 bool sendFiles(SOCKET s, const ProgramOptions& op)
 {
+	char buf[0x1000];
+	struct stat fs;
+	for (auto filename : op.files)
+	{
+		if (filename.find("..") != std::string::npos)
+		{
+			fprintf(stderr, "Illegal file name, .. not allowed: %s\n", filename.c_str());
+			continue;
+		}
+		if (stat(filename.c_str(), &fs))
+		{
+			fprintf(stderr, "Error getting file info for %s\n", filename.c_str());
+		}
+		FILE* f = fopen(filename.c_str(), "rb");
+		if (!f)
+		{
+			fprintf(stderr, "Error opening %s\n", filename.c_str());
+			continue;
+		}
+
+		// Send null terminated length + file name
+		char numbuf[40];
+		sprintf_s<40>(numbuf, "%lld ", (long long)fs.st_size);
+		send(s, numbuf, (int)strlen(numbuf), 0);
+		send(s, filename.c_str(), (int)filename.length() + 1, 0);
+		while (!feof(f))
+		{
+			int nread = (int)fread(buf, 1, sizeof(buf), f);
+			send(s, buf, nread, 0);
+		}
+	}
+	return false;
+}
+
+bool x_sendFiles(SOCKET s, const ProgramOptions& op)
+{
 	SocketStreamBuffer b(s);
 	char filebuf[0x1000];
 	if (op.useFileList)
@@ -238,7 +279,7 @@ bool sendFiles(SOCKET s, const ProgramOptions& op)
 			{
 				toRead = (fs.st_size - sent);
 				if (toRead > 0x1000) { toRead = 0x1000; }
-				nr = fread(filebuf, 1, toRead, f);
+				nr = (int)fread(filebuf, 1, toRead, f);
 				if (b.write(filebuf, nr) < (unsigned)nr)
 				{
 					fprintf(stderr, "Error: Connection closed early.\n");
@@ -252,15 +293,98 @@ bool sendFiles(SOCKET s, const ProgramOptions& op)
 	b.write("(end)\n", 6);
 	if (op.verbose)
 	{
-		printf("Wrote end of stream.\n");
+		printf("Finished sending.\n");
 	}
 	return true;
 }
 
 bool receiveFiles(SOCKET s, const ProgramOptions& op)
 {
+	char rbuf[0x1000];
+	int nread = 1;
+	std::string filename;
+	std::stringstream nameAndSizeLine;
+	off_t fileSize = 0;
+	off_t filePos = 0;
+	FILE* fout = nullptr;
+	bool readingFileContents = false;
+	while (nread > 0)
+	{
+		nread = recv(s, rbuf, 0x1000, 0);
+		off_t nullCharPos = 0;
+		bool foundNullChar = false;
+		if (readingFileContents)
+		{
+			if (filePos + nread > fileSize)
+			{
+				fwrite(rbuf, 1, fileSize - (filePos), fout);
+				nameAndSizeLine.clear();
+				nameAndSizeLine.write(rbuf + (fileSize - filePos), nread - (fileSize - filePos));
+				//nameAndSizeLine.rdbuf()->in_avail();
+				//nameAndSizeLine.str();
+				fclose(fout);
+				fout = nullptr;
+				filePos = 0;
+				fileSize = 0;
+				readingFileContents = false;
+			}
+			else
+			{
+				fwrite(rbuf, 1, nread, fout);
+				filePos += nread;
+			}
+			filePos += nread;
+		}
+		
+		if (!readingFileContents)
+		{
+			for (off_t pos = 0; pos < nread; pos++)
+			{
+				if (rbuf[pos] == 0)
+				{
+					foundNullChar = true;
+					nullCharPos = pos;
+					break;
+				}
+			}
+			if (foundNullChar)
+			{
+				nameAndSizeLine.write(rbuf, nullCharPos);
+				nameAndSizeLine >> fileSize;
+				filename = nameAndSizeLine.str();
+				if (filename.find("..") != std::string::npos)
+				{
+					fprintf(stderr, "Security warning: Remote is trying to traverse parent directory, terminating.\n");
+					#ifdef WIN32
+					closesocket(s);
+					#else
+					close(s);
+					#endif
+					return 1;
+				}
+				nameAndSizeLine.clear();
+				fout = fopen(filename.c_str(), "wb");
+				if (!fout)
+				{
+					fprintf(stderr, "Error opening %s", filename.c_str());
+					// Continue trying for any other files.
+				}
+				//fwrite(rbuf + nullCharPos, 1, nread - nullCharPos, fout);
+				//filePos += 
+			}
+			else
+			{
+				nameAndSizeLine.write(rbuf, nread);
+			}
+		}
+	}
+	return false;
+}
+
+bool x_receiveFiles(SOCKET s, const ProgramOptions& op)
+{
 	std::string line, k, v;
-	int colonPos;
+	size_t colonPos;
 	SocketStreamBuffer b(s);
 	std::string fname;
 	off_t fsize;
@@ -271,7 +395,7 @@ bool receiveFiles(SOCKET s, const ProgramOptions& op)
 
 	fsize = 0;
 	fname = "";
-	int ll = 0;
+	size_t ll = 0;
 	bool conOpen = true;
 	int nr;
 	while (conOpen)
@@ -292,7 +416,7 @@ bool receiveFiles(SOCKET s, const ProgramOptions& op)
 				{
 					for (nx = 0; nx + 0x1000 < fsize; nx += 0x1000)
 					{
-						nr = b.read(buf, 0x1000);
+						nr = (int)b.read(buf, 0x1000);
 						if (nr != 0x1000)
 						{
 							fprintf(stderr, "Warning: Connection closed early\n");
@@ -300,7 +424,7 @@ bool receiveFiles(SOCKET s, const ProgramOptions& op)
 						}
 						fwrite(buf, 1, nr, f);
 					}
-					nr = b.read(buf, fsize - nx);
+					nr = (int)b.read(buf, (int)(fsize - nx));
 					if (nr != fsize - nx)
 					{
 						fprintf(stderr, "Warning: Connection closed early\n");
@@ -352,6 +476,38 @@ bool receiveFiles(SOCKET s, const ProgramOptions& op)
 int submain(int argc, char** argv)
 {
 
+	SSL_load_error_strings();
+	ERR_load_BIO_strings();
+	OpenSSL_add_all_algorithms();
+
+	/*****************************************************
+	// Set up a Diffie-Hellman key exchange
+	auto bignumContext = BN_CTX_new();
+	auto publicBase = BN_new();
+	auto publicMod = BN_new();
+	auto mySecret = BN_new();
+	auto myPreKey = BN_new();
+	auto remoteExchangeKey = BN_new();
+
+	// Only one party can generate the public exchange numbers.
+	BN_generate_prime_ex2(publicMod, 1024, 1, nullptr, nullptr, nullptr, bignumContext);
+	BN_rand(publicBase, 64, 1, 1);
+
+	BN_mod_exp(myPreKey, publicBase, mySecret, publicMod, bignumContext);
+
+	unsigned long myExchangeKeySize = BN_num_bytes(myPreKey);
+	unsigned char* myExchangeKeyBuffer = new unsigned char[myExchangeKeySize];
+	BN_bn2bin(myPreKey, myExchangeKeyBuffer);
+
+	delete[] myExchangeKeyBuffer;
+	BN_free(publicBase);
+	BN_free(publicMod);
+	BN_free(myPreKey);
+	BN_free(mySecret);
+	BN_free(remoteExchangeKey);
+
+	***************************************************************/
+
 	if (argc < 2)
 	{
 		usage();
@@ -382,6 +538,7 @@ int submain(int argc, char** argv)
 	}
 #endif
 
+	SecureSocketStream ss;
 	if (op.listen)
 	{
 		sockaddr_in listenAddr;
@@ -413,6 +570,20 @@ int submain(int argc, char** argv)
 			peer.sin_addr.S_un.S_un_b.s_b3,
 			peer.sin_addr.S_un.S_un_b.s_b4
 			);
+
+		
+		//SecureSocketStream sockServer(con, true);
+		ss.begin(con, true);
+		if (ss.valid())
+		{
+			printf("Connection established.\n");
+		}
+		else
+		{
+			printf("Connection failed.\n");
+		}
+		return 0;
+
 		if (op.serve)
 		{
 			sendFiles(con, op);
@@ -460,6 +631,18 @@ int submain(int argc, char** argv)
 #endif
 			return 4;
 		}
+
+		ss.begin(s, false);
+		if (ss.valid())
+		{
+			printf("Connection established.\n");
+		}
+		else
+		{
+			printf("Connection failed.\n");
+		}
+		return 0;
+
 
 		if (op.serve)
 		{
