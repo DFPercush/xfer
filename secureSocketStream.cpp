@@ -13,6 +13,7 @@ void SecureSocketStream::init()
 	skey = BN_new();
 	_valid = false;
 	_eos = false;
+	verbose = false;
 	sendCipher = nullptr;
 	recvCipher = nullptr;
 	sendBuffer = nullptr;
@@ -26,7 +27,8 @@ bool SecureSocketStream::eos()
 
 bool SecureSocketStream::begin(SOCKET s, bool iAmServer)
 {
-	init();
+	//if (!_valid) { init(); }
+	_valid = true;
 	sock = s;
 	_valid = (iAmServer ? handshakeServer() : handshakeClient());
 	if (!_valid) { return false; }
@@ -37,14 +39,16 @@ bool SecureSocketStream::begin(SOCKET s, bool iAmServer)
 	return _valid;
 }
 
-SecureSocketStream::SecureSocketStream()
+SecureSocketStream::SecureSocketStream(bool verbose_p)
 {
 	init();
+	verbose = verbose_p;
 }
 
-SecureSocketStream::SecureSocketStream(SOCKET s, bool iAmServer)
+SecureSocketStream::SecureSocketStream(SOCKET s, bool iAmServer, bool verbose_p)
 {
 	init();
+	verbose = verbose_p;
 	begin(s, iAmServer);
 }
 
@@ -101,7 +105,7 @@ void SecureSocketStream::close()
 	sock = INVALID_SOCKET;
 }
 
-bool SecureSocketStream::recvFixedBuffer(SOCKET sock, void* dest, int len)
+int SecureSocketStream::recvFixedBuffer(void* dest, int len)
 {
 	int nread = 0;
 	int nreadcum = 0;
@@ -112,16 +116,17 @@ bool SecureSocketStream::recvFixedBuffer(SOCKET sock, void* dest, int len)
 		if (nread <= 0)
 		{
 			// Connection terminated.
-			_eos = true;
+			// TODO: Bug if string buffer not empty?
+			//_eos = true;
 			if (nread < 0)
 			{
 				_valid = false;
 			}
-			return false;
+			return nreadcum;
 		}
 		nreadcum += nread;
 	}
-	return true;
+	return nreadcum;
 }
 
 bool SecureSocketStream::initCipher(BIGNUM* key, unsigned char* iv)
@@ -149,6 +154,10 @@ bool SecureSocketStream::handshakeServer()
 	hh.version = SecureSocketStream_HandshakeVersion;
 	hh.sizeOfThisStruct = sizeof(hh);
 
+	if (verbose)
+	{
+		printf("Generating keys. This is random and might take a few seconds...\n");
+	}
 	BN_generate_prime_ex2(publicMod, SecureSocketStream_DHPrimeModBits, 1, nullptr, nullptr, nullptr, bignumContext);
 	BN_rand(publicBase, 64, 1, 1);
 	BN_rand(mySecret, SecureSocketStream_DHPrimeModBits - 2, 1, 1);
@@ -177,15 +186,20 @@ bool SecureSocketStream::handshakeServer()
 	BN_bn2bin(publicBase, hh.publicBase);
 	BN_bn2bin(myPreKey, hh.preKey);
 
-	printf("Sending handshake header, %d bytes ... ", (int)sizeof(hh));
+	if (verbose) { printf("Sending handshake header, %d bytes ... ", (int)sizeof(hh)); }
 	//::send(sock, (char*)&hh, sizeof(hh), 0);
-	sendLoop(&hh, sizeof(hh));
-	printf("ok.\n");
+	if (sendLoop(&hh, sizeof(hh)) < 0)
+	{
+		if (verbose) { fprintf(stderr, "error sending handshake\n");}
+		return false;
+	}
+	if (verbose) { printf("ok.\n"); }
 
 	HandshakeHeader hhClient;
-	printf("Waiting to receive client handshake header, %d bytes ... ", (int)sizeof(hhClient));
-	if (!recvFixedBuffer(sock, &hhClient, sizeof(hhClient))) { return fail(); }
-	printf("ok.\n");
+	if (verbose) {printf("Waiting to receive client handshake header, %d bytes ... ", (int)sizeof(hhClient));}
+	//if (!recvFixedBuffer(sock, &hhClient, sizeof(hhClient))) { return fail(); }
+	if (recvFixedBuffer(&hhClient, sizeof(hhClient)) < sizeof(hhClient)) { return fail(); }
+	if (verbose) {printf("ok.\n");}
 
 	if (hhClient.publicBaseSizeOctets != hh.publicBaseSizeOctets) { return fail(); }
 	if (hhClient.publicModSizeOctets != hh.publicModSizeOctets) { return fail(); }
@@ -196,16 +210,16 @@ bool SecureSocketStream::handshakeServer()
 	BN_mod_exp(skey, remoteExchangeKey, mySecret, publicMod, bignumContext);
 	// Secret key established.
 	
-	printf("Sending GOOD signal ... ");
+	if (verbose) {printf("Sending GOOD signal ... ");}
 	//::send(sock, "GOOD", 4, 0);
-	sendLoop("GOOD");
-	printf("ok.\n");
+	sendLoop("GOOD", 4);
+	if (verbose) {printf("ok.\n");}
 
 	//auto decStr = BN_bn2dec(skey);
 	//printf("skey = %s\n", decStr);
 	//OPENSSL_free(decStr);
 
-	printf("Handshake complete.\n");
+	if (verbose) {printf("Handshake complete.\n");}
 
 	initCipher(skey, hh.chachaIV);
 	return true;
@@ -222,17 +236,18 @@ bool SecureSocketStream::handshakeClient()
 	int nreadcum = 0;
 	int nread = 0;
 
-	printf("Waiting to receive server handshake header, %d bytes ... ", (int)sizeof(hhServer));
-	if (!recvFixedBuffer(sock, &hhServer, sizeof(hhServer)))
+	if (verbose) {printf("Waiting to receive server handshake header, %d bytes ... ", (int)sizeof(hhServer));}
+	//if (!recvFixedBuffer(sock, &hhServer, sizeof(hhServer)))
+	if (recvFixedBuffer(&hhServer, sizeof(hhServer)) < sizeof(hhServer))
 	{
-		printf("Error: Did not receive all the expected data.\n");
+		if (verbose) { fprintf(stderr, "Error: Did not receive all the expected data.\n");}
 		return fail();
 	}
-	printf("ok.\n");
+	if (verbose) {printf("ok.\n");}
 
 	if (hhServer.sizeOfThisStruct != sizeof(hhServer) || hhServer.version != SecureSocketStream_HandshakeVersion)
 	{	
-		printf("Error: Version mismatch.\n");
+		if (verbose) {fprintf(stderr, "Error: Version mismatch.\n");}
 		return fail();
 	}
 
@@ -248,35 +263,35 @@ bool SecureSocketStream::handshakeClient()
 	hhme.preKeySizeOctets = BN_num_bytes(myPreKey);
 	if (hhme.preKeySizeOctets > sizeof(hhme.preKey))
 	{
-		printf("Error: public exchange key is too large to fit in network buffer.\n");
+		if (verbose) {fprintf(stderr, "Error: public exchange key is too large to fit in network buffer.\n");}
 		return fail();
 	}
 	BN_bn2bin(myPreKey, hhme.preKey);
 	BN_mod_exp(skey, remoteExchangeKey, mySecret, publicMod, bignumContext);
 	// Secret key established (symkey), now send server our info	
-	printf("Sending handshake header, %d bytes ... ", (int)sizeof(hhme));
+	if (verbose) {printf("Sending handshake header, %d bytes ... ", (int)sizeof(hhme));}
 	//::send(sock, (char*)&hhme, sizeof(hhme), 0);
 	sendLoop(&hhme, sizeof(hhme));
-	printf("ok.\n");
+	if (verbose) {printf("ok.\n");}
 
 	char gbuf[5];
 	memset(gbuf, 0, 5);
-	printf("Waiting for GOOD signal ... ");
-	recvFixedBuffer(sock, gbuf, 4);
+	if (verbose) {printf("Waiting for GOOD signal ... ");}
+	recvFixedBuffer(gbuf, 4);
 	gbuf[4] = 0;
 	if (strcmp(gbuf, "GOOD"))
 	{
-		printf("Error: server did not acknowledge good status.\n");
+		if (verbose) {fprintf(stderr, "Error: server did not acknowledge good status.\n");}
 		return fail();
 	}
-	printf("ok.\n");
+	if (verbose) {printf("ok.\n");}
 
 	//auto decStr = BN_bn2dec(skey);
 	//printf("skey = %s\n", decStr);
 	//OPENSSL_free(decStr);
 
 	//EVP_aes_256_cbc();
-	printf("Handshake complete.\n");
+	if (verbose) {printf("Handshake complete.\n");}
 
 	initCipher(skey, hhServer.chachaIV);
 	return true;
@@ -293,6 +308,7 @@ bool SecureSocketStream::fail()
 int SecureSocketStream::readAnySize(void* buffer, int maxSize)
 {
 	if (!_valid) { return -1; }
+	if (_eos) { return 0; }
 
 	//ss.seekg(0, std::ios::end);
 	//auto ssLen = (int)ss.tellg();
@@ -300,18 +316,19 @@ int SecureSocketStream::readAnySize(void* buffer, int maxSize)
 	//std::string ssLeftover(ss.str());
 	//int ssLeftoverLength = (int)ssLeftover.length();
 	
-	auto ssLen = (int)ss.tellp();
+	auto ssLen = ssRecv.tellp() - ssRecv.tellg();
 	if (ssLen > 0)
 	{
 		if (ssLen > maxSize)
 		{
-			ss.read((char*)buffer, maxSize);
+			ssRecv.read((char*)buffer, maxSize);
 			return maxSize;
 		}
 		else
 		{
-			ss.read((char*)buffer, ssLen);
-			return ssLen;
+			ssRecv.read((char*)buffer, ssLen);
+			//_eos = true;
+			return (int)ssLen;
 		}
 	}
 	int sizeToRead = SecureSocketStream_SocketBufferSize;
@@ -319,7 +336,8 @@ int SecureSocketStream::readAnySize(void* buffer, int maxSize)
 	int nread = recv(sock, (char*)recvBuffer, sizeToRead, 0);
 	if (nread <= 0)
 	{
-		_eos = true;
+		// TODO: Bug if string buffer not empty?
+		//_eos = true;
 		return nread;
 	}
 	int outl;
@@ -328,6 +346,13 @@ int SecureSocketStream::readAnySize(void* buffer, int maxSize)
 		_valid = false;
 		return -1;
 	}
+
+#if (_DEBUG)
+	//printf("\n\n");
+	//fwrite(buffer, 1, nread, stdout);
+	//printf("\n\n");
+#endif
+
 	return nread;
 }
 
@@ -341,18 +366,20 @@ int SecureSocketStream::readFixedSize(void* buffer, int size)
 	//int ssLeftoverLength = (int)ssLeftover.length();
 
 	int nreadCum = 0;
-	auto ssLen = (int)ss.tellp();
+	auto ssLen = ssRecv.tellp() - ssRecv.tellg();
 	if (ssLen > 0)
 	{
-		if (ssLen > size)
+		if (ssLen >= size)
 		{
-			ss.read((char*)buffer, size);
+			ssRecv.read((char*)buffer, size);
 			nreadCum += size;
 		}
 		else
 		{
-			ss.read((char*)buffer, ssLen);
-			nreadCum += ssLen;
+			ssRecv.read((char*)buffer, ssLen);
+			//_eos = true;
+			nreadCum += (int)ssLen;
+			return nreadCum;
 		}
 	}
 
@@ -366,7 +393,7 @@ int SecureSocketStream::readFixedSize(void* buffer, int size)
 		nread = recv(sock, (char*)recvBuffer, toRead, 0);
 		if (nread <= 0)
 		{
-			_eos = true;
+			//_eos = true;
 			return nreadCum;
 		}
 		if (!EVP_DecryptUpdate(recvCipher, (unsigned char*)buffer + nreadCum, &outl, recvBuffer, nread))
@@ -377,6 +404,12 @@ int SecureSocketStream::readFixedSize(void* buffer, int size)
 		nreadCum += outl;
 	}
 
+	#ifdef _DEBUG
+		//printf("\n\n");
+		//fwrite(buffer, 1, nreadCum, stdout);
+		//printf("\n\n");
+	#endif
+
 	return nreadCum;
 }
 
@@ -385,6 +418,11 @@ int SecureSocketStream::write(const void* buffer, int size)
 	if (!_valid) { return -1; }
 	int pos;
 	int outl;
+
+	#ifdef _DEBUG
+		//fwrite(buffer, 1, size, stdout);
+	#endif
+
 	for (pos = 0; pos + SecureSocketStream_SocketBufferSize < size; pos += SecureSocketStream_SocketBufferSize)
 	{
 		if (!EVP_EncryptUpdate(sendCipher, sendBuffer, &outl, (unsigned char*)buffer + pos, SecureSocketStream_SocketBufferSize))
@@ -410,28 +448,107 @@ int SecureSocketStream::write(const void* buffer, int size)
 
 bool SecureSocketStream::getline(std::string& outstr)
 {
-	auto ssLen = ss.tellp();
+	//// TODO: Remove debug breakpoint
+	//static int hitcount = 0;
+	//hitcount++;
+	//if (hitcount > 1)
+	//{
+	//	_CrtDbgBreak();
+	//}
+
+
+
+
+	if (!_valid || _eos) { return false; }
+	bool leos = _eos;
+	//auto ssLen = ss.tellp() - ss.tellg();
+	decltype(ssRecv.tellp() - ssRecv.tellg()) ssLen;
 	std::string s3;
 	char rbuf[SecureSocketStream_SocketBufferSize];
 	int nread;
+
+	
+	std::string streamContents;
+	decltype(ssRecv.tellg()) g, p;
+
+	
 	while (true)
 	{
-		ssLen = ss.tellp();
+		ssLen = ssRecv.tellp() - ssRecv.tellg();
+
+
+		streamContents = ssRecv.str(); // TODO: remove debug thing
+		g = ssRecv.tellg();
+		p = ssRecv.tellp();
+
+		
 		if (ssLen > 0)
 		{
-			s3 = ss.str();
+			s3 = ssRecv.str().substr(ssRecv.tellg());
 			if (s3.find_first_of("\r\n") != std::string::npos)
 			{
-				std::getline(ss, outstr);
+				std::getline(ssRecv, outstr);
 				return true;
 			}
 		}
-		nread = readAnySize(rbuf, SecureSocketStream_SocketBufferSize);
+		
+		//nread = readAnySize(rbuf, SecureSocketStream_SocketBufferSize);
+		//nread = recv(sock, (char*)recvBuffer, SecureSocketStream_SocketBufferSize, 0);
+		//int dlen = 0;
+		//if (nread > 0)
+		//{
+		//	if (!EVP_DecryptUpdate(recvCipher, (unsigned char*)rbuf, &dlen, recvBuffer, nread))
+		//	{
+		//		_valid = false;
+		//		return false;
+		//	}
+		//}
+
+		//nread = recvDecrypt(rbuf, SecureSocketStream_SocketBufferSize);
+		//if (nread <= 0)
+		//{
+		//	s3 = ssRecv.str();
+		//	auto tg = ssRecv.tellg();
+		//	if (s3.length() > 0 && tg >= 0)
+		//	{
+		//		// Socket is done, but there's more in the string buffer
+		//		if (leos)
+		//		{
+		//			// Already reached end state from before
+		//			return false;
+		//		}
+		//		outstr = s3.substr(tg);
+		//		_eos = true;
+		//		return true;
+		//	}
+		//	else
+		//	{
+		//		// Socket and string buffer are both empty.
+		//		if (leos) 
+		//		{
+		//			// Already reached end state from before
+		//			return false;
+		//		}
+		//		// User hasn't seen end of stream yet.
+		//		outstr = "";
+		//		_eos = true;
+		//		return true;
+		//	}
+		//}
+		//ssRecv.write(rbuf, nread);
+
+		nread = recvDecrypt(rbuf, SecureSocketStream_SocketBufferSize);
 		if (nread <= 0)
 		{
-			return fail();
+			outstr = ssRecv.str();
+			ssRecv.str("");
+			ssRecv.clear();
+			return !leos;
 		}
-		ss.write(rbuf, nread);
+		else
+		{
+			ssRecv.write(rbuf, nread);
+		}
 	}
 	return false;
 }
@@ -444,8 +561,10 @@ int SecureSocketStream::sendLoop(const void* buffer, int size)
 	while (nsentCum < size)
 	{
 		nsent = ::send(sock, (char*)buffer + nsentCum, size - nsentCum, 0);
+		//printf("Send packet, %d byte payload\n", nsent);
 		if (nsent <= 0)
 		{
+			if (verbose) {fprintf(stderr, "Send failure\n");}
 			fail();
 			return nsentCum;
 		}
@@ -457,5 +576,25 @@ int SecureSocketStream::sendLoop(const void* buffer, int size)
 int SecureSocketStream::sendLoop(const char* c_str)
 {
 	return sendLoop(c_str, (int)strlen(c_str));
+}
+
+int SecureSocketStream::recvDecrypt(void* dest, int maxSize)
+{
+	if (!_valid) { return -1; }
+	if (_eos) { return 0; }
+	int toRead = min(maxSize, SecureSocketStream_SocketBufferSize);
+	int nread = recv(sock, (char*)recvBuffer, toRead, 0);
+	if (nread <= 0) 
+	{
+		//_eos = true;
+		return 0; 
+	}
+	int outlen = 0;
+	if (!EVP_DecryptUpdate(recvCipher, (unsigned char*)dest, &outlen, recvBuffer, nread))
+	{
+		fail();
+		return -1;
+	}
+	return outlen;
 }
 

@@ -108,8 +108,8 @@ public:
 		unsigned char preKey[0x400];
 	};
 
-	SecureSocketStream();
-	SecureSocketStream(SOCKET s, bool iAmServer);
+	SecureSocketStream(bool verbose = false);
+	SecureSocketStream(SOCKET s, bool iAmServer, bool verbose = false);
 	//SecureSocketStream(const char* host);
 	//SecureSocketStream(const char* host, int port);
 	//SecureSocketStream(const std::string& host);
@@ -133,6 +133,9 @@ public:
 	void close();
 	bool eos();
 	bool eof() { return eos(); }
+
+	bool verbose;
+
 private:
 
 	void init();
@@ -142,13 +145,14 @@ private:
 	bool initCipher(BIGNUM* key, unsigned char* iv);
 	int sendLoop(const void* buffer, int size);
 	int sendLoop(const char* c_str); // Does not send null terminator
-	bool recvFixedBuffer(SOCKET sock, void* dest, int len);
+	int recvFixedBuffer(void* dest, int len);
+	int recvDecrypt(void* dest, int maxSize);
 
 	// Members vars
 	bool _valid;
 	bool _eos;
 	SOCKET sock;
-	std::stringstream ss;
+	std::stringstream ssRecv;
 	unsigned char* recvBuffer;
 	unsigned char* sendBuffer;
 
@@ -168,10 +172,12 @@ private:
 
 template<typename T> SecureSocketStream& SecureSocketStream::operator << (const T& thingToSend)
 {
-	ss << thingToSend;
-	std::string s(ss.str());
+	std::stringstream lss;
+	lss << thingToSend;
+	std::string s(lss.str());
 	write(s.c_str(), (int)s.length());
-	ss.clear();
+	//lss.str("");
+	//lss.clear();
 	return *this;
 }
 
@@ -179,7 +185,7 @@ template<typename T> SecureSocketStream& SecureSocketStream::operator >> (T& thi
 {
 	// Need to receive enough to encounter whitespace after item
 
-	auto ssLen = ss.tellp();
+	decltype(ssRecv.tellp() - ssRecv.tellg()) ssLen;
 	std::string s3;
 	char rbuf[SecureSocketStream_SocketBufferSize];
 	int nread;
@@ -187,10 +193,11 @@ template<typename T> SecureSocketStream& SecureSocketStream::operator >> (T& thi
 	const char* whitespace = " \t\r\n\0";
 	while (true)
 	{
-		ssLen = ss.tellp();
+		ssLen = ssRecv.tellp() - ssRecv.tellg();
 		if (ssLen > 0)
 		{
-			s3 = ss.str();
+			//s3 = ssRecv.str();
+			s3 = ssRecv.str().substr(ssRecv.tellg());
 			w1 = (int)s3.find_first_of(whitespace);
 			if (w1 == std::string::npos) { goto readMore; } // yeah, I know
 			nw = (int)s3.find_first_not_of(whitespace);
@@ -200,17 +207,20 @@ template<typename T> SecureSocketStream& SecureSocketStream::operator >> (T& thi
 				w2 = (int)s3.find_first_of(whitespace, nw);
 				if (w2 == std::string::npos) { goto readMore; }
 			}
-			ss >> thingToRecv;
+			ssRecv >> thingToRecv;
 			return *this;
 		}
 	readMore:
-		nread = readAnySize(rbuf, SecureSocketStream_SocketBufferSize);
+		//nread = readAnySize(rbuf, SecureSocketStream_SocketBufferSize);
+		nread = recvDecrypt(rbuf, SecureSocketStream_SocketBufferSize);
 		if (nread <= 0)
 		{
-			fail();
+			//fail();
+			_eos = true;
+			ssRecv >> thingToRecv;
 			return *this;
 		}
-		ss.write(rbuf, nread);
+		ssRecv.write(rbuf, nread);
 	}
 	return *this;
 }
