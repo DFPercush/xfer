@@ -550,7 +550,7 @@ bool receiveFiles(SOCKET sock, ProgramOptions op)
 			{
 				break;
 			}
-			if (fwrite(fileBuf, 1, nread, f) < nread)
+			if ((int)fwrite(fileBuf, 1, nread, f) < nread)
 			{
 				if (!op.quiet) fprintf(stderr, "File write error: %s\n", filename.c_str());
 				return false;

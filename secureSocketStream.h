@@ -147,6 +147,7 @@ private:
 	int sendLoop(const char* c_str); // Does not send null terminator
 	int recvFixedBuffer(void* dest, int len);
 	int recvDecrypt(void* dest, int maxSize);
+	void ssCheckClear();
 
 	// Members vars
 	bool _valid;
@@ -197,7 +198,7 @@ template<typename T> SecureSocketStream& SecureSocketStream::operator >> (T& thi
 		if (ssLen > 0)
 		{
 			//s3 = ssRecv.str();
-			s3 = ssRecv.str().substr(ssRecv.tellg());
+			s3 = ssRecv.str().substr((int)ssRecv.tellg());
 			w1 = (int)s3.find_first_of(whitespace);
 			if (w1 == std::string::npos) { goto readMore; } // yeah, I know
 			nw = (int)s3.find_first_not_of(whitespace);

@@ -322,12 +322,14 @@ int SecureSocketStream::readAnySize(void* buffer, int maxSize)
 		if (ssLen > maxSize)
 		{
 			ssRecv.read((char*)buffer, maxSize);
+			ssCheckClear();
 			return maxSize;
 		}
 		else
 		{
 			ssRecv.read((char*)buffer, ssLen);
 			//_eos = true;
+			ssCheckClear();
 			return (int)ssLen;
 		}
 	}
@@ -353,6 +355,7 @@ int SecureSocketStream::readAnySize(void* buffer, int maxSize)
 	//printf("\n\n");
 #endif
 
+	ssCheckClear();
 	return nread;
 }
 
@@ -372,6 +375,7 @@ int SecureSocketStream::readFixedSize(void* buffer, int size)
 		if (ssLen >= size)
 		{
 			ssRecv.read((char*)buffer, size);
+			ssCheckClear();
 			nreadCum += size;
 		}
 		else
@@ -379,6 +383,7 @@ int SecureSocketStream::readFixedSize(void* buffer, int size)
 			ssRecv.read((char*)buffer, ssLen);
 			//_eos = true;
 			nreadCum += (int)ssLen;
+			ssCheckClear();
 			return nreadCum;
 		}
 	}
@@ -394,6 +399,7 @@ int SecureSocketStream::readFixedSize(void* buffer, int size)
 		if (nread <= 0)
 		{
 			//_eos = true;
+			ssCheckClear();
 			return nreadCum;
 		}
 		if (!EVP_DecryptUpdate(recvCipher, (unsigned char*)buffer + nreadCum, &outl, recvBuffer, nread))
@@ -410,6 +416,7 @@ int SecureSocketStream::readFixedSize(void* buffer, int size)
 		//printf("\n\n");
 	#endif
 
+	ssCheckClear();
 	return nreadCum;
 }
 
@@ -468,8 +475,8 @@ bool SecureSocketStream::getline(std::string& outstr)
 	int nread;
 
 	
-	std::string streamContents;
-	decltype(ssRecv.tellg()) g, p;
+	//std::string streamContents;
+	//decltype(ssRecv.tellg()) g, p;
 
 	
 	while (true)
@@ -477,17 +484,17 @@ bool SecureSocketStream::getline(std::string& outstr)
 		ssLen = ssRecv.tellp() - ssRecv.tellg();
 
 
-		streamContents = ssRecv.str(); // TODO: remove debug thing
-		g = ssRecv.tellg();
-		p = ssRecv.tellp();
-
+		//streamContents = ssRecv.str(); // TODO: remove debug thing
+		//g = ssRecv.tellg();
+		//p = ssRecv.tellp();
 		
 		if (ssLen > 0)
 		{
-			s3 = ssRecv.str().substr(ssRecv.tellg());
+			s3 = ssRecv.str().substr((int)ssRecv.tellg());
 			if (s3.find_first_of("\r\n") != std::string::npos)
 			{
 				std::getline(ssRecv, outstr);
+				ssCheckClear();
 				return true;
 			}
 		}
@@ -596,5 +603,16 @@ int SecureSocketStream::recvDecrypt(void* dest, int maxSize)
 		return -1;
 	}
 	return outlen;
+}
+
+void SecureSocketStream::ssCheckClear()
+{
+	auto g = ssRecv.tellg();
+	auto p = ssRecv.tellp();
+	if ((p - g == 0) && (p != 0))
+	{
+		ssRecv.str(std::string());
+		ssRecv.clear();
+	}
 }
 
