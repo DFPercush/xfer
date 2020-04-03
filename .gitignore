@@ -6,4 +6,6 @@ test001.bin
 *.opendb
 *.sdf
 *.dll
+bin/
+inter/
 

@@ -17,16 +17,25 @@
 #endif
 
 #else
-#include <socket.h>
+#include <sys/socket.h>
 #include <netdb.h>
+#include <unistd.h>
 #define cFilePathSeparator '/';
 #define sFilePathSeparator "/";
+#define SOCKADDR_IN sockaddr_in
+#define SOCKADDR sockaddr
+#define closesocket(s) ::close(s)
+#define INVALID_SOCKET -1
 #endif
+
+#define longbyte(v, b) ((v & (0xFF << (8 * b))) >> (8 * b))
 
 
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <time.h>
+#include <string.h>
+#include <memory.h>
 
 #include <list>
 #include <string>
@@ -78,6 +87,20 @@ void clearLine()
 }
 
 
+bool isIntString(const char* s)
+{
+	char testOut[30];
+	int test = atoi(s);
+#ifdef _MSC_VER
+	sprintf_s<30>(testOut, "%d", test);
+#else
+	sprintf(testOut, "%d", test);
+#endif
+	if (!strcmp(s, testOut)) { return true; }
+	else { return false; }
+}
+
+
 class ProgramOptions
 {
 public:
@@ -124,15 +147,6 @@ std::string pathOnly(const std::string& fullPathAndFilename)
 	auto lastSlash = fullPathAndFilename.find_last_of("/\\");
 	if (lastSlash == std::string::npos) { return "."; }
 	else { return fullPathAndFilename.substr(0, lastSlash - 1); }
-}
-
-bool isIntString(const char* s)
-{
-	char testOut[30];
-	int test = atoi(s);
-	sprintf_s<30>(testOut, "%d", test);
-	if (!strcmp(s, testOut)) { return true; }
-	else { return false; }
 }
 
 char usageString[] = 
@@ -214,17 +228,18 @@ ProgramOptions parseCmd(int argc, char** argv)
 			i++;
 			if (i < argc)
 			{
-				unsigned short testShort;
-				testShort = atoi(argv[i]);
-				char testStr[30];
-				sprintf_s<30>(testStr, "%d", testShort);
-				if (strcmp(testStr, argv[i]))
+				//unsigned short testShort;
+				//testShort = atoi(argv[i]);
+				//char testStr[30];
+				//sprintf_s<30>(testStr, "%d", testShort);
+				//if (strcmp(testStr, argv[i]))
+				if (!isIntString(argv[i]))
 				{
 					std::string emsg = "Not a valid TCP port number for -p: ";
 					emsg += argv[i];
 					throw emsg.c_str();
 				}
-				op.port = testShort;
+				op.port = atoi(argv[i]);
 				if (op.remote)
 				{
 					((sockaddr_in*)op.remote->ai_addr)->sin_port = htons(op.port);
@@ -304,13 +319,13 @@ bool sendFiles(SOCKET sock, ProgramOptions op)
 	SHA256_CTX shacx;
 
 	s << xferVersionStr << "\n";
-	//struct stat st;
-	//struct stat64 st;
-	//decltype(stat64("")) st
-	
-	//decltype(_stat64("",nullptr)) st;
+
+#ifdef _WINDOWS_
 	struct _stat64 st;
-	
+#else
+	struct stat st;
+#endif
+
 	time_t lastStatusTime, now;
 	time(&lastStatusTime);
 	
@@ -320,7 +335,11 @@ bool sendFiles(SOCKET sock, ProgramOptions op)
 	{
 		if (!op.quiet) printf("%s\n", filename.c_str());
 		//if (stat(filename.c_str(), &st))
+#ifdef _WINDOWS_
 		if (_stat64(filename.c_str(), &st))
+#else
+		if (stat(filename.c_str(), &st))
+#endif
 		{
 			if (!op.quiet) fprintf(stderr, "Failed to get file information for %s\n", filename.c_str());
 			return false;
@@ -504,7 +523,7 @@ bool receiveFiles(SOCKET sock, ProgramOptions op)
 		time(&lognow);
 		tm* lt = localtime(&lognow);
 		SOCKADDR_IN sa;
-		int salen = sizeof(sa);
+		socklen_t salen = sizeof(sa);
 		int sockerr;
 		if (getpeername(sock, (SOCKADDR*)&sa, &salen))
 		{
@@ -519,6 +538,8 @@ bool receiveFiles(SOCKET sock, ProgramOptions op)
 			}
 			memset(&sa, 0, sizeof(sa));
 		}
+
+#ifdef _WINDOWS_
 		fprintf(log, "%.4d-%.2d-%.2d %.2d:%.2d:%.2d %d.%d.%d.%d => %s\n",
 			lt->tm_year + 1900, lt->tm_mon + 1, lt->tm_mday,
 			lt->tm_hour, lt->tm_min, lt->tm_sec,
@@ -527,6 +548,16 @@ bool receiveFiles(SOCKET sock, ProgramOptions op)
 			sa.sin_addr.S_un.S_un_b.s_b3,
 			sa.sin_addr.S_un.S_un_b.s_b4,
 			filename.c_str());
+#else
+		fprintf(log, "%.4d-%.2d-%.2d %.2d:%.2d:%.2d %d.%d.%d.%d => %s\n",
+			lt->tm_year + 1900, lt->tm_mon + 1, lt->tm_mday,
+			lt->tm_hour, lt->tm_min, lt->tm_sec,
+			longbyte(sa.sin_addr.s_addr, 0),
+			longbyte(sa.sin_addr.s_addr, 1),
+			longbyte(sa.sin_addr.s_addr, 2),
+			longbyte(sa.sin_addr.s_addr, 3),
+			filename.c_str());
+#endif
 		if (fileRename.length() > 0)
 		{
 			fprintf(log, "  Renamed old file: %s\n", fileRename.c_str());
@@ -651,7 +682,11 @@ int submain(int argc, char** argv)
 	{
 		sockaddr_in listenAddr;
 		listenAddr.sin_family = AF_INET;
+#ifdef _WINDOWS_
 		listenAddr.sin_addr.S_un.S_addr = 0;
+#else
+		listenAddr.sin_addr.s_addr = 0;
+#endif
 		memset(listenAddr.sin_zero, 0, sizeof(listenAddr.sin_zero));
 		listenAddr.sin_port = htons(op.port);
 		auto listenSock = socket(AF_INET, SOCK_STREAM, 0);
@@ -659,7 +694,7 @@ int submain(int argc, char** argv)
 		bind(listenSock, (sockaddr*)&listenAddr, sizeof(listenAddr));
 		listen(listenSock, 1);
 		sockaddr_in clientAddr;
-		int clientAddrSize = sizeof(clientAddr);
+		socklen_t clientAddrSize = sizeof(clientAddr);
 		if (!op.quiet) printf("Waiting for connection on port %d ...\n", op.port);
 		auto con = accept(listenSock, (sockaddr*)&clientAddr, &clientAddrSize);
 		closesocket(listenSock);
@@ -673,18 +708,31 @@ int submain(int argc, char** argv)
 			return 6;
 		}
 		sockaddr_in peer;
-		int peerSize = sizeof(peer);
+		socklen_t peerSize = sizeof(peer);
 		memset(&peer, 0, sizeof(peer));
 		getpeername(con, (sockaddr*)&peer, &peerSize);
 		
 		if (!op.quiet || op. showConnectedIp)
 		{
+#ifdef _WINDOWS_
 			printf("Connection accepted from %d.%d.%d.%d\n", 
 				peer.sin_addr.S_un.S_un_b.s_b1, 
 				peer.sin_addr.S_un.S_un_b.s_b2,
 				peer.sin_addr.S_un.S_un_b.s_b3,
 				peer.sin_addr.S_un.S_un_b.s_b4
 				);
+#else
+			printf("Connection accepted from %d.%d.%d.%d\n",
+				//peer.sin_addr.S_un.S_un_b.s_b1,
+				//peer.sin_addr.S_un.S_un_b.s_b2,
+				//peer.sin_addr.S_un.S_un_b.s_b3,
+				//peer.sin_addr.S_un.S_un_b.s_b4
+				longbyte(peer.sin_addr.s_addr, 0),
+				longbyte(peer.sin_addr.s_addr, 1),
+				longbyte(peer.sin_addr.s_addr, 2),
+				longbyte(peer.sin_addr.s_addr, 3)
+			);
+#endif
 		}
 
 		if (op.serve)

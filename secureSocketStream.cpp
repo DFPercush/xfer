@@ -96,11 +96,7 @@ void SecureSocketStream::close()
 {
 	if (sock != INVALID_SOCKET)
 	{
-#ifdef WIN32
 		closesocket(sock);
-#else
-		close(sock);
-#endif
 	}
 	sock = INVALID_SOCKET;
 }
@@ -158,7 +154,8 @@ bool SecureSocketStream::handshakeServer()
 	{
 		printf("Generating keys. This is random and might take a few seconds...\n");
 	}
-	BN_generate_prime_ex2(publicMod, SecureSocketStream_DHPrimeModBits, 1, nullptr, nullptr, nullptr, bignumContext);
+	//BN_generate_prime_ex2(publicMod, SecureSocketStream_DHPrimeModBits, 1, nullptr, nullptr, nullptr, bignumContext);
+	BN_generate_prime_ex(publicMod, SecureSocketStream_DHPrimeModBits, 1, nullptr, nullptr, nullptr);
 	BN_rand(publicBase, 64, 1, 1);
 	BN_rand(mySecret, SecureSocketStream_DHPrimeModBits - 2, 1, 1);
 	auto chachaIV = BN_new();
@@ -589,7 +586,8 @@ int SecureSocketStream::recvDecrypt(void* dest, int maxSize)
 {
 	if (!_valid) { return -1; }
 	if (_eos) { return 0; }
-	int toRead = min(maxSize, SecureSocketStream_SocketBufferSize);
+
+	int toRead = maxSize < SecureSocketStream_SocketBufferSize ? maxSize : SecureSocketStream_SocketBufferSize;
 	int nread = recv(sock, (char*)recvBuffer, toRead, 0);
 	if (nread <= 0) 
 	{

@@ -5,12 +5,20 @@
 // A https server, for example, won't be able to talk to this.
 // Uses a Diffie-Hellman key exchange handshake to obtain a symmetric cipher key.
 
+#include <string.h>
+#include <memory.h>
 #include <sys/types.h>
 #ifdef _WIN32
 #include <Ws2tcpip.h>
 #else
-#include <socket.h>
+#include <sys/socket.h>
 #include <netdb.h>
+#include <unistd.h>
+typedef int SOCKET;
+#define INVALID_SOCKET -1
+#define closesocket(s) ::close(s)
+#define SOCKADDR_IN sockaddr_in
+#define SOCKADDR sockaddr
 #endif
 
 #include <sstream>
