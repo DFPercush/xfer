@@ -2,7 +2,7 @@
 
 // Default port, Must be an integer between 1 and 65535, recommend higher than 10000
 // Can be overridden by the -p option at run time
-#define DEFAULT_PORT 50420
+#define DEFAULT_PORT 12121
 
 
 #if defined(WIN32) || defined(_WIN32) || defined(_WINDOWS_)
