@@ -34,15 +34,15 @@ Invoking the program with no options will yield some usage help text.
 
 
 ##### \* "securely":  
-    Although there are many similarities, this program does not use the official TLS standard
-  or check any certificates. It uses OpenSSL to encrypt the data, just like many mainstream
-  secure programs, but does not conform to a strict transfer protocol standard.There is no proof of 
-  identity between parties. It only guarantees that whatever is sent, is accurately received, and 
-  not viewable by any third party during transit. Encryption keys are generated new for each session
-  and not stored anywhere on the file system.
-    The idea is to be in communication with the other party in a live setting, and verify the
-  connection via phone or text/chat. It only accepts one connection before closing the port,
-  so you will know if that's the right person by their confirmation or IP address.
+Although there are many similarities, this program does not use the official TLS standard
+or check any certificates. It uses OpenSSL to encrypt the data, just like many mainstream
+secure programs, but does not conform to a strict transfer protocol standard.There is no proof of 
+identity between parties. It only guarantees that whatever is sent, is accurately received, and 
+not viewable by any third party during transit. Encryption keys are generated new for each session
+and not stored anywhere on the file system.
+The idea is to be in communication with the other party in a live setting, and verify the
+connection via phone or text/chat. It only accepts one connection before closing the port,
+so you will know if that's the right person by their confirmation or IP address.
 
 _Note_: The OpenSSL library on the windows build is linked statically, to avoid dependence on extra DLLs.
 This allows a single .exe file to be distributed without requiring other files packaged with it.
