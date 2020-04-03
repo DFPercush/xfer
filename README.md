@@ -1,22 +1,26 @@
-# xfer
-A simple, session based, tcp peer file transfer program written in C++.
-Operates from the command line.
-Either end can connect or host the connection.
-Sending and receiving files is treated separately from establishing the connection, so 
-the party with more knowledge and access to their firewall will typically host. 
-If both parties need to send files to the other, two separate sessions will be required, as 
-this program only knows whether it should act as sender or receiver.
+xfer - A file transfer command
 
-The files will be saved in the receiver's current working directory. 
-Relative paths are truncated. If you need to transfer a directory structure,
-zip or tar it first. 
+Now with encryption!
 
-Don't run this program from a system folder like C:\Windows or /usr/bin
-If I need to explain why, you probably shouldn't be using this.
+Provides a single-line command to transfer files securely* over the net.
+(Requires basic knowledge of how to use a command line.)
+
+When you just need to send a file or two between two computers on your network, or over the internet,
+but you don't want to send your data through a third party service, and can't be bothered
+to set up a full FTP or HTTP server, or install some flavor of remote desktop software.
+
+- Either sender or receiver can connect, or host the connection, depending on who has more
+  knowledge and access to their firewall. If both parties need to send files to the other,
+  two separate sessions will be required.
+
+- The files will be saved relative to the receiver's current working directory,
+  with the parent directory token .. explicitly forbidden.
+  Don't run this program from a system folder like C:\Windows or /usr/bin,
+  unless you're trying to overwrite critical system files and are extremely trusting.
 
 Some basic use cases...
 To listen and receive files: xfer -l
-To listen and send files: xfer -l -s -f file1 file2 file3...
+To listen and send files: xfer -l -s -f file1.txt file2.jpg file3.docx...
 To connect and receive: xfer -c my.host.com 
 To connect and send: xfer -c 1.2.3.4 -s -f file1 file2 file3...
 
@@ -24,20 +28,64 @@ Tip: use the -v option (verbose) to see more detail.
 
 Invoking the program with no options will yield some usage help text.
 
+
+* "securely":
+    Although there are many similarities, this program does not use the official TLS standard
+  or check any certificates. It uses OpenSSL to encrypt the data, just like many mainstream
+  secure programs, but does not conform to a strict transfer protocol standard.There is no proof of 
+  identity between parties. It only guarantees that whatever is sent, is accurately received, and 
+  not viewable by any third party during transit. Encryption keys are generated new for each session
+  and not stored anywhere on the file system.
+    The idea is to be in communication with the other party in a live setting, and verify the
+  connection via phone or text/chat. It only accepts one connection before closing the port,
+  so you will know if that's the right person by their confirmation or IP address.
+
+Note: The OpenSSL library on the windows build is linked statically, to avoid dependence on extra DLLs.
+      This allows a single .exe file to be distributed without requiring other files packaged with it.
+      This contributes most of the size of the program.
+
 This program does not use UPnP or any kind of router/firewall magic. (yet?)
 If both parties are behind firewalls that they are unable to configure, 
 another solution may be required.
 
-Once all files have been sent, the connection is closed and program terminates.
-It doesn't have much in the way of security, except for this single-connection design.
-When a connection is accepted, the listening port is immediately closed before any
-data transfer begins. This means that, if anyone hijacks the session, you'll know
-about it, because the legitimate peer will be unable to connect. "It wasn't me!"
+No files from the host machine will be made available unless you explicitly list them on 
+the command line. The sender determines which files will be sent. There is no way for a
+receiver to request a certain file.
 
-No files from the host machine will be made available
-unless you explicitly list them on the command line. The sender determines which files will
-be sent. There is no way for a receiver/peer to request a certain file.
-
-The transfer mode is always binary. No newline conversions are present. The headers use a single LF.
+The transfer mode is always binary. No newline conversions are present. The headers use a single LF ('\n').
 
 If you get missing DLL errors on Windows binary, please install the Visual C++ runtime from https://www.microsoft.com/en-us/download/details.aspx?id=48145
+
+
+================================
+COMPILING FROM SOURCE
+
+Linux:
+    - make sure you have the package 'gcc-c++' and 'openssl-devel' from your package manager
+    - git clone https://github.com/DFPercush/xfer
+    - make
+    That's about it. I'm not in the habit of using configure scripts, so if
+    something is weird about your system that makes this not compile, post
+    an issue about it and we'll go from there.
+
+Windows / Visual studio:
+    If you have git for windows, clone this repo, or just download the zip file
+    Open the xfer.sln file in visual studio.
+    F7 / Build solution. I suggest using Release / x64 mode for better performance.
+
+=================================
+INSTALLATION
+
+Linux:
+    - sudo cp ./bin/xfer /usr/bin
+       ... or somewhere your shell can find it
+
+Windows 10:
+    You can either copy xfer.exe to a known path like Windows\system32, or modify your %PATH% environment variable:
+    - Click on the windows button and start typing "advanced system settings" - open it
+    - click the button at the bottom "Environment Variables"
+    - Select the variable "Path" and click the Edit button
+    - Click "New" and put the full path of the folder where xfer.exe is located. 
+      This can be copied and pasted from the address bar in File Explorer
+
+      Now you can use the command 'xfer' from the command prompt.
