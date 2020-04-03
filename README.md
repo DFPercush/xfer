@@ -55,3 +55,37 @@ receiver to request a certain file.
 The transfer mode is always binary. No newline conversions are present. The headers use a single LF ('\n').
 
 If you get missing DLL errors on Windows binary, please install the Visual C++ runtime from https://www.microsoft.com/en-us/download/details.aspx?id=48145
+
+
+================================
+COMPILING FROM SOURCE
+
+Linux:
+    - make sure you have the package 'gcc-c++' and 'openssl-devel' from your package manager
+    - git clone https://github.com/DFPercush/xfer
+    - make
+    That's about it. I'm not in the habit of using configure scripts, so if
+    something is weird about your system that makes this not compile, post
+    an issue about it and we'll go from there.
+
+Windows / Visual studio:
+    If you have git for windows, clone this repo, or just download the zip file
+    Open the xfer.sln file in visual studio.
+    F7 / Build solution. I suggest using Release / x64 mode for better performance.
+
+=================================
+INSTALLATION
+
+Linux:
+    - sudo cp ./bin/xfer /usr/bin
+       ... or somewhere your shell can find it
+
+Windows 10:
+    You can either copy xfer.exe to a known path like Windows\system32, or modify your %PATH% environment variable:
+    - Click on the windows button and start typing "advanced system settings" - open it
+    - click the button at the bottom "Environment Variables"
+    - Select the variable "Path" and click the Edit button
+    - Click "New" and put the full path of the folder where xfer.exe is located. 
+      This can be copied and pasted from the address bar in File Explorer
+
+      Now you can use the command 'xfer' from the command prompt.
