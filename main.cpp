@@ -9,8 +9,8 @@
 
 #include <Ws2tcpip.h>
 #include <Windows.h>
-#define cFilePathSeparator '\\';
-#define sFilePathSeparator "\\";
+#define cFilePathSeparator '\\'
+#define sFilePathSeparator "\\"
 
 #ifndef _WINDOWS_
 #define _WINDOWS_
@@ -20,8 +20,8 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <unistd.h>
-#define cFilePathSeparator '/';
-#define sFilePathSeparator "/";
+#define cFilePathSeparator '/'
+#define sFilePathSeparator "/"
 #define SOCKADDR_IN sockaddr_in
 #define SOCKADDR sockaddr
 #define closesocket(s) ::close(s)
@@ -41,6 +41,8 @@
 #include <string>
 #include <mutex>
 #include <sstream>
+#include <filesystem>
+#include <iostream>
 
 #include "secureSocketStream.h"
 
@@ -50,6 +52,24 @@
 
 const char* xferVersionStr = "xfer_v0.0.2";
 const off_t FileChunkSize = 0x400;
+
+std::string htonPath(std::string p)
+{
+	for (size_t i = 0; i < p.length(); i++)
+	{
+		if (p[i] == cFilePathSeparator) { p[i] = '/'; }
+	}
+	return p;
+}
+
+std::string ntohPath(std::string p)
+{
+	for (size_t i = 0; i < p.length(); i++)
+	{
+		if (p[i] == '/') { p[i] = cFilePathSeparator; }
+	}
+	return p;
+}
 
 void clearLine()
 {
@@ -137,7 +157,7 @@ std::string filenameOnly(const std::string& fullpath)
 	size_t f = fullpath.find_last_of('/');
 	size_t b = fullpath.find_last_of('\\');
 	if (f == b && b == std::string::npos) { return fullpath; }
-	start = (f > b) ? f : b;
+	start = (b == std::string::npos) ? f : b;
 	start++;
 	return fullpath.substr(start, fullpath.length() - start);
 }
@@ -146,7 +166,7 @@ std::string pathOnly(const std::string& fullPathAndFilename)
 {
 	auto lastSlash = fullPathAndFilename.find_last_of("/\\");
 	if (lastSlash == std::string::npos) { return "."; }
-	else { return fullPathAndFilename.substr(0, lastSlash - 1); }
+	else { return fullPathAndFilename.substr(0, lastSlash); }
 }
 
 char usageString[] = 
@@ -168,6 +188,9 @@ char usageString[] =
 "-f [files]\n"
 "    Give a list of files to send. Any text following this option,\n"
 "    that is not itself an option, will be treated as a file name.\n"
+"    If no -f is given on sender, reads file names one per line\n"
+"    from stdin. Wild cards are not expanded here, use another tool \n"
+"    like find to pipe in multiple file names, one per line.\n"
 "\n"
 "-v\n"
 "    Verbose, show extra status information.\n"
@@ -180,6 +203,19 @@ char usageString[] =
 "\n"
 "--\n"
 "    Stop parsing options\n"
+"\n"
+"Examples:\n"
+"  xfer -l -s -f myPhoto.jpg\n"
+"    Listen as host and send file myPhoto.jpg\n"
+"  xfer -l\n"
+"    Listen as host and receive files.\n"
+"  xfer -c 123.45.67.89\n"
+"    Connect to IP address and receive files.\n"
+"  xfer -c my.website.com -s -f myNotes.txt myLogo.png \n"
+"    Connect to a host with a domain and upload files.\n"
+"  find . 2> /dev/null | xfer -l -s\n"
+"    (linux) Listen as host and send entire current directory.\n"
+"\n"
 ;
 
 void usage()
@@ -329,10 +365,36 @@ bool sendFiles(SOCKET sock, ProgramOptions op)
 	time_t lastStatusTime, now;
 	time(&lastStatusTime);
 	
-	FILE* f;
 	if (!op.quiet) printf("Sending files...\n\n");
-	for (auto filename : op.files)
+	
+	FILE* f;
+	decltype(op.files.begin()) itFilename;
+	if (op.useFileList)
 	{
+		itFilename = op.files.begin();
+	}
+	
+	//for (auto filename : op.files)
+	std::string filename;
+	bool firstFile = true;
+	while (true)
+	{
+		// Emulate a for loop depending on which mode
+		if ((!firstFile) && (op.useFileList)) { itFilename++; }
+		if (op.useFileList)
+		{
+			if (itFilename == op.files.end()) { break; }
+			filename = *itFilename;
+		}
+		else
+		{
+			if (std::cin.eof()) { break; }
+			std::getline(std::cin, filename);
+			if (std::cin.eof() && filename.length() == 0) { break; }
+		}
+		firstFile = false;
+		// End for loop emulation
+
 		if (!op.quiet) printf("%s\n", filename.c_str());
 		//if (stat(filename.c_str(), &st))
 #ifdef _WINDOWS_
@@ -341,8 +403,9 @@ bool sendFiles(SOCKET sock, ProgramOptions op)
 		if (stat(filename.c_str(), &st))
 #endif
 		{
-			if (!op.quiet) fprintf(stderr, "Failed to get file information for %s\n", filename.c_str());
-			return false;
+			if (!op.quiet) fprintf(stderr, "  Warning: Read failed: %s\n", filename.c_str());
+			//return false;
+			continue;
 		}
 		f = fopen(filename.c_str(), "rb");
 		if (!f) 
@@ -353,7 +416,19 @@ bool sendFiles(SOCKET sock, ProgramOptions op)
 
 		SHA256_Init(&shacx);
 
+		if (filename[0] == cFilePathSeparator)
+		{
+			filename = filename.substr(1);
+		}
+		else if (filename.substr(1, 2) == std::string(":") + sFilePathSeparator)
+		{
+			filename = filename.substr(2);
+		}
+
+		filename = htonPath(filename);
 		s << st.st_size << " " << filename << "\n";
+		
+
 		off_t toSend;
 		off_t nreadBuf;
 		for (long long fpos = 0; fpos < st.st_size; fpos += nreadBuf)
@@ -398,6 +473,7 @@ bool sendFiles(SOCKET sock, ProgramOptions op)
 			if (!op.quiet) fprintf(stderr, "Socket write error\n");
 			return false;
 		}
+		firstFile = false;
 	}
 	s << "0 <END>\n";
 	s.close();
@@ -454,6 +530,20 @@ bool receiveFiles(SOCKET sock, ProgramOptions op)
 			return false;
 		}
 
+		filename = ntohPath(filename);
+
+		// Sanitize root paths.
+		if (filename[0] == cFilePathSeparator)
+		{
+			// "/root/something"
+			filename = filename.substr(1);
+		}
+		else if (filename.substr(1, 2) == std::string(":") + sFilePathSeparator)
+		{
+			// "C:\something"
+			filename = filename.substr(2);
+		}
+
 		if (filename == "<END>" && fileSize == 0)
 		{
 			s.close();
@@ -476,6 +566,10 @@ bool receiveFiles(SOCKET sock, ProgramOptions op)
 		}
 
 		std::string logfilename = pathOnly(filename);
+
+		// Create the directory if it doesn't exist.
+		std::filesystem::create_directories(logfilename); // the variable 'logfilename' is somewhat confusing, it's just the path at this point.
+		
 		logfilename += sFilePathSeparator;
 		logfilename += "xfer.log";
 		time_t lognow;
@@ -556,7 +650,7 @@ bool receiveFiles(SOCKET sock, ProgramOptions op)
 			sa.sin_addr.S_un.S_un_b.s_b2,
 			sa.sin_addr.S_un.S_un_b.s_b3,
 			sa.sin_addr.S_un.S_un_b.s_b4,
-			filename.c_str());
+			filenameOnly(filename).c_str());
 #else
 		fprintf(log, "%.4d-%.2d-%.2d %.2d:%.2d:%.2d %d.%d.%d.%d => %s\n",
 			lt->tm_year + 1900, lt->tm_mon + 1, lt->tm_mday,
@@ -565,11 +659,11 @@ bool receiveFiles(SOCKET sock, ProgramOptions op)
 			longbyte(sa.sin_addr.s_addr, 1),
 			longbyte(sa.sin_addr.s_addr, 2),
 			longbyte(sa.sin_addr.s_addr, 3),
-			filename.c_str());
+			filenameOnly(filename).c_str());
 #endif
 		if (fileRename.length() > 0)
 		{
-			fprintf(log, "  Renamed old file: %s\n", fileRename.c_str());
+			fprintf(log, "  Renamed old file: %s\n", filenameOnly(fileRename).c_str());
 		}
 
 

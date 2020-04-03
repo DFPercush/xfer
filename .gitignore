@@ -1,11 +1,9 @@
-.vs
-Debug
-Release
-hello.txt
-test001.bin
+.vs/
+Debug/
+Release/
+x64/
 *.opendb
 *.sdf
 *.dll
 bin/
-inter/
-
+obj/

@@ -3,9 +3,9 @@
 CC=g++
 LINKER=g++
 HEADERS=secureSocketStream.h
-CPPFLAGS=-D_FILE_OFFSET_BITS=64
+CPPFLAGS=-D_FILE_OFFSET_BITS=64 -std=c++17
 LINKFLAGS=-lcrypto -lssl
-ODIR=inter
+ODIR=obj
 BINDIR=bin
 
 all: $(BINDIR)/xfer

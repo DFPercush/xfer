@@ -27,6 +27,8 @@ unless you're trying to overwrite critical system files and are extremely trusti
  * To listen (server) and send files: `xfer -l -s -f file1.txt file2.jpg file3.docx...`  
  * To connect (client) and receive: `xfer -c my.host.com`  
  * To connect (client) and send: `xfer -c 1.2.3.4 -s -f file1 file2 file3...`  
+ * (linux only) To send entire contents of a directory: `find . 2> /dev/null | xfer -l -s`  
+You can pipe file names to the windows version too, but it doesn't have `find`.
 
 _Tip_: use the -v option (verbose) to see more detail.
 
