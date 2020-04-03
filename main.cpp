@@ -466,6 +466,15 @@ bool receiveFiles(SOCKET sock, ProgramOptions op)
 		if (!op.quiet) printf("%s\n", filename.c_str());
 		//fflush(stdout);
 
+		std::string parentDirToken = "..";
+		parentDirToken += sFilePathSeparator;
+
+		if (filename.find(parentDirToken) != std::string::npos)
+		{
+			fprintf(stderr, "Security warning: Destination path traverses parent directory. Aborting.\n");
+			return false;
+		}
+
 		std::string logfilename = pathOnly(filename);
 		logfilename += sFilePathSeparator;
 		logfilename += "xfer.log";
@@ -677,6 +686,21 @@ int submain(int argc, char** argv)
 		if (!op.quiet) printf("Current directory is %s\n", curDir);
 	}
 #endif
+
+	if (op.serve)
+	{
+		std::string parentDirToken = "..";
+		parentDirToken += sFilePathSeparator;
+		for (std::string filename : op.files)
+		{
+			if (filename.find(parentDirToken) != std::string::npos)
+			{
+				fprintf(stderr, "Security warning: Destination path traverses parent directory. Aborting.\n");
+				return 1;
+			}
+		}
+	}
+
 
 	if (op.listen)
 	{
