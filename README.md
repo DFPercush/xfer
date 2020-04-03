@@ -1,13 +1,13 @@
-#xfer
-###A file transfer command
+# xfer
+### A file transfer command
 
-#####_Now with encryption! _
+##### _Now with encryption! _
 
 Provides a single-line command to transfer files securely\* over the net.
 
 _This program is operated from a command prompt or shell; there is no graphical interface_
 
-#####_What is it for?_
+##### _What is it for?_
 When you just need to send a file or two between two computers on your network, or over the internet,
 but you don't want to send your data through a third party service, and can't be bothered
 to set up a full FTP or HTTP server, or install some flavor of remote desktop software.
@@ -60,9 +60,9 @@ The transfer mode is always binary. No newline conversions are present. The head
 
 
 
-###COMPILING FROM SOURCE
+### COMPILING FROM SOURCE
 
-####Linux:
+#### Linux:
  * Get the packages `gcc-c++` and `openssl-devel` from your package manager.
 
  * `git clone https://github.com/DFPercush/xfer`
@@ -73,7 +73,7 @@ The transfer mode is always binary. No newline conversions are present. The head
 something is weird about your system that makes this not compile, post
     an issue about it and we'll go from there.
 
-####Windows / Visual studio:
+#### Windows / Visual studio:
 * First, you must install the [OpenSSL libraries](https://wiki.openssl.org/index.php/Compilation_and_Installation). That is a topic unto itself, but, as in my case, if you also want to build those from source, you will need a perl interpreter, as well as the [Netwide Assembler (NASM)](https://www.nasm.us/). I used [strawberry perl](http://www.strawberryperl.com/), which is free and requires no registration, but the official guide recommends [Active Perl](http://www.activestate.com/ActivePerl).
 
 * This project expects the OpenSSL libraries to be in a parallel folder named `openssl-32` or `openssl-64`, i.e., if you clone this project into `Source\Repos\xfer`, there should be a `Source\Repos\openssl-64` with the files `libcrypto_static.lib` and `libssl_static.lib`. You can use the dynamic versions without the `_static` if you want, but you'll have to drag a couple of DLLs around wherever you put this.
@@ -83,14 +83,14 @@ something is weird about your system that makes this not compile, post
 * Open `xfer.sln` in visual studio.
 * Press `F7` or Build solution. I suggest using Release / x64 mode for better performance.
 
-###INSTALLATION
+### INSTALLATION
 
-####Linux:
+#### Linux:
 
 * `sudo cp ./bin/xfer /usr/bin`  
        ... or somewhere your shell can find it
 
-####Windows 10:
+#### Windows 10:
 You can either copy `xfer.exe` to a known path like Windows\system32, or modify your `%PATH%` environment variable with these steps:
 
 * Click on the windows/start button and start typing "advanced system settings" - open it
