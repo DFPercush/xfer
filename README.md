@@ -1,13 +1,13 @@
 # xfer
 ### A file transfer command
 
-##### _Now with encryption! _
+##### _Now with encryption!_
 
 Provides a single-line command to transfer files securely\* over the net.
 
 _This program is operated from a command prompt or shell; there is no graphical interface_
 
-##### _What is it for?_
+#### _What is it for?_
 When you just need to send a file or two between two computers on your network, or over the internet,
 but you don't want to send your data through a third party service, and can't be bothered
 to set up a full FTP or HTTP server, or install some flavor of remote desktop software.
@@ -21,7 +21,7 @@ with the parent directory token `..` explicitly forbidden.
 Don't run this program from a system folder like `C:\Windows` or `/usr/bin`,
 unless you're trying to overwrite critical system files and are extremely trusting.
 
-Some basic use cases...  
+#### Some basic use cases...  
 
  * To listen (server) and receive files: `xfer -l`  
  * To listen (server) and send files: `xfer -l -s -f file1.txt file2.jpg file3.docx...`  
@@ -33,7 +33,7 @@ _Tip_: use the -v option (verbose) to see more detail.
 Invoking the program with no options will yield some usage help text.
 
 
-\* "securely":  
+##### \* "securely":  
     Although there are many similarities, this program does not use the official TLS standard
   or check any certificates. It uses OpenSSL to encrypt the data, just like many mainstream
   secure programs, but does not conform to a strict transfer protocol standard.There is no proof of 
