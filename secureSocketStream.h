@@ -25,7 +25,7 @@ typedef int SOCKET;
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 //#include <openssl/bio.h>
-
+#include <bit>
 
 #define SecureSocketStream_DHPrimeModBits 1024
 #define SecureSocketStream_HandshakeVersion 2
@@ -33,26 +33,28 @@ typedef int SOCKET;
 
 
 
-union EndianTest_t
-{
-	short s;
-	struct
-	{
-		char ofs0;
-		char ofs1;
-	};
-};
+//union EndianTest_t
+//{
+//	short s;
+//	struct
+//	{
+//		char ofs0;
+//		char ofs1;
+//	};
+//};
 
 constexpr bool BigEndianSystem()
 {
-	EndianTest_t u{1};
-	return (u.ofs1 != 0);
+	return std::endian::native == std::endian::big;
+	//EndianTest_t u{1};
+	//return (u.ofs1 != 0);
 }
 
 constexpr bool LittleEndianSystem()
 {
-	EndianTest_t u{1};
-	return (u.ofs0 != 0);
+	return std::endian::native == std::endian::little;
+	//EndianTest_t u{1};
+	//return (u.ofs0 != 0);
 }
 
 class nshort

@@ -230,8 +230,8 @@ bool SecureSocketStream::valid()
 bool SecureSocketStream::handshakeClient()
 {
 	HandshakeHeader hhServer;
-	int nreadcum = 0;
-	int nread = 0;
+	//int nreadcum = 0;
+	//int nread = 0;
 
 	if (verbose) {printf("Waiting to receive server handshake header, %d bytes ... ", (int)sizeof(hhServer));}
 	//if (!recvFixedBuffer(sock, &hhServer, sizeof(hhServer)))

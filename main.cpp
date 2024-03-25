@@ -126,12 +126,12 @@ class ProgramOptions
 public:
 	unsigned short port;
 
-	int listen : 1;
-	int serve : 1;
-	int useFileList : 1;
-	int verbose : 1;
-	int quiet : 1;
-	int showConnectedIp : 1;
+	unsigned int listen : 1;
+	unsigned int serve : 1;
+	unsigned int useFileList : 1;
+	unsigned int verbose : 1;
+	unsigned int quiet : 1;
+	unsigned int showConnectedIp : 1;
 
 	std::list<std::string> files;
 	std::string myName;
@@ -237,15 +237,15 @@ ProgramOptions parseCmd(int argc, char** argv)
 		}
 		else if (!strcmp(argv[i], "-s"))
 		{
-			op.serve = 1;
+			op.serve = 1u;
 		}
 		else if (!strcmp(argv[i], "-l"))
 		{
-			op.listen = 1;
+			op.listen = 1u;
 		}
 		else if (!strcmp(argv[i], "-f"))
 		{
-			op.useFileList = 1;
+			op.useFileList = 1u;
 		}
 		else if (!strcmp(argv[i], "-n"))
 		{
@@ -345,14 +345,18 @@ bool sendFiles(SOCKET sock, ProgramOptions op)
 	SecureSocketStream s(sock, op.listen, op.verbose);
 	if (!s.valid())
 	{
-		if (!op.quiet) fprintf(stderr, "Encyption handshake error.\n");
+		if (!op.quiet) fprintf(stderr, "Encryption handshake error.\n");
 		return false;
 	}
 
 	char fileBuf[FileChunkSize];
 	unsigned char shamd[SHA256_DIGEST_LENGTH];
 
-	SHA256_CTX shacx;
+	auto sslcx = OSSL_LIB_CTX_new();
+	//SHA256_CTX shacx;
+	EVP_MD_CTX* shacx = EVP_MD_CTX_new();
+	EVP_MD* shaimpl = EVP_MD_fetch(sslcx, "SHA256", "");
+
 
 	s << xferVersionStr << "\n";
 
@@ -414,7 +418,9 @@ bool sendFiles(SOCKET sock, ProgramOptions op)
 			return false;
 		}
 
-		SHA256_Init(&shacx);
+		//SHA256_Init(&shacx);
+		//auto shaeng = ENGINE
+		EVP_DigestInit_ex(shacx, shaimpl, nullptr);
 
 		if (filename[0] == cFilePathSeparator)
 		{
@@ -441,7 +447,7 @@ bool sendFiles(SOCKET sock, ProgramOptions op)
 					// Don't bottleneck on console system calls.
 					// It's been long enough.
 					clearLine();
-					printf("%lld / %lld", fpos, st.st_size);
+					printf("%lld / %ld", fpos, st.st_size);
 					lastStatusTime = now;
 				}
 			}
@@ -453,7 +459,8 @@ bool sendFiles(SOCKET sock, ProgramOptions op)
 				if (!op.quiet) fprintf(stderr, "File read error: %s", filename.c_str());
 				return false;
 			}
-			SHA256_Update(&shacx, fileBuf, nreadBuf);
+			//SHA256_Update(&shacx, fileBuf, nreadBuf);
+			EVP_DigestUpdate(shacx, fileBuf, nreadBuf); 
 			if (s.write(fileBuf, nreadBuf) <= 0)
 			{
 				if (!op.quiet) fprintf(stderr, "Socket write error\n");
@@ -467,7 +474,8 @@ bool sendFiles(SOCKET sock, ProgramOptions op)
 			//fflush(stdout);
 		}
 
-		SHA256_Final(shamd, &shacx);
+		//SHA256_Final(shamd, &shacx);
+		EVP_DigestFinal_ex(shacx, shamd, nullptr);
 		if (s.write(shamd, SHA256_DIGEST_LENGTH) <= 0)
 		{
 			if (!op.quiet) fprintf(stderr, "Socket write error\n");
@@ -482,6 +490,9 @@ bool sendFiles(SOCKET sock, ProgramOptions op)
 		clearLine();
 		printf("\nAll done!\n\n");
 	}
+	EVP_MD_free(shaimpl);
+	EVP_MD_CTX_free(shacx);
+	OSSL_LIB_CTX_free(sslcx);
 	return true;
 }
 
@@ -509,10 +520,15 @@ bool receiveFiles(SOCKET sock, ProgramOptions op)
 
 	std::string filename;
 	long long fileSize;
-	SHA256_CTX shacx;
+	//SHA256_CTX shacx;
 	unsigned char shamdHere[SHA256_DIGEST_LENGTH];
 	unsigned char shamdThere[SHA256_DIGEST_LENGTH];
 	unsigned char fileBuf[FileChunkSize];
+
+	auto sslcx = OSSL_LIB_CTX_new();
+	//SHA256_CTX shacx;
+	EVP_MD_CTX* shacx = EVP_MD_CTX_new();
+	EVP_MD* shaimpl = EVP_MD_fetch(sslcx, "SHA256", "");
 
 	time_t lastStatusTime, now;
 	time(&lastStatusTime);
@@ -674,7 +690,9 @@ bool receiveFiles(SOCKET sock, ProgramOptions op)
 		int nread;
 		int toRead;
 
-		SHA256_Init(&shacx);
+		//SHA256_Init(&shacx);
+		EVP_DigestInit_ex(shacx, shaimpl, nullptr);
+
 		while (nreadCum < fileSize && !s.eos())
 		{
 			if (fileSize - nreadCum < FileChunkSize) { toRead = (int)(fileSize - nreadCum); }
@@ -689,7 +707,8 @@ bool receiveFiles(SOCKET sock, ProgramOptions op)
 				if (!op.quiet) fprintf(stderr, "File write error: %s\n", filename.c_str());
 				return false;
 			}
-			SHA256_Update(&shacx, fileBuf, nread);
+			//SHA256_Update(&shacx, fileBuf, nread);
+			EVP_DigestUpdate(shacx, fileBuf, nread);
 
 			if (!op.quiet)
 			{
@@ -716,7 +735,8 @@ bool receiveFiles(SOCKET sock, ProgramOptions op)
 		fclose(f);
 		f = nullptr;
 		s.read(shamdThere, SHA256_DIGEST_LENGTH);
-		SHA256_Final(shamdHere, &shacx);
+		//SHA256_Final(shamdHere, &shacx);
+		EVP_DigestFinal_ex(shacx, shamdHere, nullptr);
 		char shamdHereStr[65];
 		char shamdThereStr[65];
 		const char* hexMap = "0123456789abcdef";
@@ -741,6 +761,9 @@ bool receiveFiles(SOCKET sock, ProgramOptions op)
 		fclose(log);
 	}
 	if (!op.quiet) fprintf(stderr, "Error: Reached end of stream without an END marker from sender.\n");
+	EVP_MD_free(shaimpl);
+	EVP_MD_CTX_free(shacx);
+	OSSL_LIB_CTX_free(sslcx);
 	return false;
 }
 
@@ -748,7 +771,7 @@ int submain(int argc, char** argv)
 {
 	int ret = 0;
 	SSL_load_error_strings();
-	ERR_load_BIO_strings();
+	//ERR_load_BIO_strings();
 	OpenSSL_add_all_algorithms();
 
 	if (argc < 2)
@@ -808,7 +831,7 @@ int submain(int argc, char** argv)
 		memset(listenAddr.sin_zero, 0, sizeof(listenAddr.sin_zero));
 		listenAddr.sin_port = htons(op.port);
 		auto listenSock = socket(AF_INET, SOCK_STREAM, 0);
-		u_long temp = 1;
+		//u_long temp = 1;
 		bind(listenSock, (sockaddr*)&listenAddr, sizeof(listenAddr));
 		listen(listenSock, 1);
 		sockaddr_in clientAddr;
@@ -907,7 +930,7 @@ int submain(int argc, char** argv)
 
 int main(int argc, char** argv)
 {
-	bool pauseAnyway = false;
+	//bool pauseAnyway = false;
 	int ret = submain(argc, argv);
 //#ifdef WIN32
 //	if ((ret != 0) || (pauseAnyway)) { system("pause"); }
