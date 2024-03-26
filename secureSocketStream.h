@@ -26,6 +26,7 @@ typedef int SOCKET;
 #include <openssl/err.h>
 //#include <openssl/bio.h>
 #include <bit>
+#include <stdint.h>
 
 #define SecureSocketStream_DHPrimeModBits 1024
 #define SecureSocketStream_HandshakeVersion 2
@@ -35,7 +36,7 @@ typedef int SOCKET;
 
 //union EndianTest_t
 //{
-//	short s;
+//	int16_t s;
 //	struct
 //	{
 //		char ofs0;
@@ -57,40 +58,40 @@ constexpr bool LittleEndianSystem()
 	//return (u.ofs0 != 0);
 }
 
-class nshort
+class n16
 {
 public:
-	nshort& operator=(short n) { val = htons(n); return *this; }
-	operator short() { return ntohs(val); }
+	n16& operator=(int16_t n) { val = htons(n); return *this; }
+	operator int16_t() { return ntohs(val); }
 private:
-	short val;
+	int16_t val;
 };
 
-class unshort
+class un16
 {
 public:
-	unshort& operator=(unsigned short n) { val = htons(n); return *this; }
-	operator unsigned short() { return ntohs(val); }
+	un16& operator=(uint16_t n) { val = htons(n); return *this; }
+	operator uint16_t() { return ntohs(val); }
 private:
-	unsigned short val;
+	uint16_t val;
 };
 
-class nlong
+class n32
 {
 public:
-	nlong& operator=(long n) { val = htonl(n); return *this; }
-	operator long() { return ntohl(val); }
+	n32& operator=(int32_t n) { val = htonl(n); return *this; }
+	operator int32_t() { return ntohl(val); }
 private:
-	long val;
+	int32_t val;
 };
 
-class unlong
+class un32
 {
 public:
-	unlong& operator=(unsigned long n) { val = htonl(n); return *this; }
-	operator unsigned long() { return ntohl(val); }
+	un32& operator=(uint32_t n) { val = htonl(n); return *this; }
+	operator uint32_t() { return ntohl(val); }
 private:
-	unsigned long val;
+	uint32_t val;
 };
 
 
@@ -102,11 +103,11 @@ public:
 
 	struct HandshakeHeader
 	{
-		unlong sizeOfThisStruct;
-		unlong version;
-		unlong publicModSizeOctets;
-		unlong publicBaseSizeOctets;
-		unlong preKeySizeOctets;
+		un32 sizeOfThisStruct;
+		un32 version;
+		un32 publicModSizeOctets;
+		un32 publicBaseSizeOctets;
+		un32 preKeySizeOctets;
 		unsigned char chachaIV[8];
 		// The BIGNUM buffers should be longer than necessary
 		// For 1024-bit numbers only 128 bytes is necessary, but to allow for future expansion and such,

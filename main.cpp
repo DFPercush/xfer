@@ -437,7 +437,7 @@ bool sendFiles(SOCKET sock, ProgramOptions op)
 
 		off_t toSend;
 		off_t nreadBuf;
-		for (long long fpos = 0; fpos < st.st_size; fpos += nreadBuf)
+		for (int64_t fpos = 0; fpos < st.st_size; fpos += nreadBuf)
 		{
 			if (!op.quiet)
 			{
@@ -447,7 +447,7 @@ bool sendFiles(SOCKET sock, ProgramOptions op)
 					// Don't bottleneck on console system calls.
 					// It's been long enough.
 					clearLine();
-					printf("%lld / %ld", fpos, st.st_size);
+					printf("%I64d / %I64d", fpos, st.st_size);
 					lastStatusTime = now;
 				}
 			}

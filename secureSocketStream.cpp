@@ -161,7 +161,7 @@ bool SecureSocketStream::handshakeServer()
 	auto chachaIV = BN_new();
 	BN_mod_exp(myPreKey, publicBase, mySecret, publicMod, bignumContext);
 
-	unsigned long myExchangeKeySize = BN_num_bytes(myPreKey);
+	uint32_t myExchangeKeySize = BN_num_bytes(myPreKey);
 	unsigned char* myExchangeKeyBuffer = new unsigned char[myExchangeKeySize];
 	BN_bn2bin(myPreKey, myExchangeKeyBuffer);
 

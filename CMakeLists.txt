@@ -2,6 +2,8 @@
 
 cmake_minimum_required(VERSION 3.15)
 set(CMAKE_CXX_STANDARD 20)
+set(OPENSSL_ROOT_DIR "C:/Program Files/OpenSSL" CACHE PATH "OpenSSL Installation Folder")
+set(ENV{OPENSSL_ROOT_DIR} ${OPENSSL_ROOT_DIR})
 
 #set(ARCH_AVX on CACHE BOOL "Target CPU with AVX")
 #set(ARCH_SSE on CACHE BOOL "Target CPU with SSE2")
@@ -12,7 +14,7 @@ set(CMAKE_CXX_STANDARD 20)
 # TODO: Indicate the required version of SSE 4.1, circa 2006
 
 #find_package(boost_headers)
-#find_package(openssl)
+find_package(OpenSSL REQUIRED)
 
 project(xfer)
 
@@ -22,8 +24,12 @@ add_executable(xfer
 	secureSocketStream.cpp
 )
 
-target_link_libraries(xfer ssl crypto)
+#target_link_libraries(xfer ssl crypto)
+target_link_libraries(xfer OpenSSL::SSL OpenSSL::Crypto)
 
+if(CMAKE_SYSTEM_NAME STREQUAL Windows)
+	target_link_libraries(xfer ws2_32)
+endif()
 
 
 #add_library(dfp STATIC
