@@ -39,8 +39,8 @@
 
 #include <list>
 #include <string>
-#include <mutex>
-#include <sstream>
+//#include <mutex>
+//#include <sstream>
 #include <filesystem>
 #include <iostream>
 
@@ -447,7 +447,11 @@ bool sendFiles(SOCKET sock, ProgramOptions op)
 					// Don't bottleneck on console system calls.
 					// It's been long enough.
 					clearLine();
+#ifdef _WIN32
 					printf("%I64d / %I64d", fpos, st.st_size);
+#else
+					printf("%ld / %ld", fpos, st.st_size);
+#endif
 					lastStatusTime = now;
 				}
 			}
