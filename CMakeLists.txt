@@ -1,9 +1,12 @@
 
 
 cmake_minimum_required(VERSION 3.15)
+
+
 set(CMAKE_CXX_STANDARD 20)
 set(OPENSSL_ROOT_DIR "C:/Program Files/OpenSSL" CACHE PATH "OpenSSL Installation Folder")
 set(ENV{OPENSSL_ROOT_DIR} ${OPENSSL_ROOT_DIR})
+
 
 #set(ARCH_AVX on CACHE BOOL "Target CPU with AVX")
 #set(ARCH_SSE on CACHE BOOL "Target CPU with SSE2")
@@ -11,10 +14,13 @@ set(ENV{OPENSSL_ROOT_DIR} ${OPENSSL_ROOT_DIR})
 #set(USE_WASMER on CACHE BOOL "Enable web assembly via wasmer.")
 
 
-# TODO: Indicate the required version of SSE 4.1, circa 2006
 
-#find_package(boost_headers)
-find_package(OpenSSL REQUIRED)
+
+
+
+
+
+#find_package(OpenSSL REQUIRED)
 
 project(xfer)
 
@@ -24,8 +30,60 @@ add_executable(xfer
 	secureSocketStream.cpp
 )
 
+#set_target_properties(xfer PROPERTIES LINK_SEARCH_START_STATIC 1)
+#set_target_properties(xfer PROPERTIES LINK_SEARCH_END_STATIC 1)
+#set(CMAKE_FIND_LIBRARY_SUFFIXES .a ${CMAKE_FIND_LIBRARY_SUFFIXES})
+#find_library(SSL_LIB ssl_a REQUIRED)
+#find_library(CRYPTO_LIB crypto_a REQUIRED)
+
+#message(${SSL_LIB})
+#message(${CRYPTO_LIB})
+
+#set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libgcc -static-libstdc++")
+
+file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/openssl/build)
+
+if(CMAKE_SYSTEM_NAME STREQUAL Windows)
+	add_custom_command(
+		OUTPUT
+			${CMAKE_BINARY_DIR}/openssl/build/libssl.lib
+			${CMAKE_BINARY_DIR}/openssl/build/libcrypto.lib
+		#COMMAND ${CMAKE_SOURCE_DIR}/build_openssl_win32.bat
+		COMMAND perl ${CMAKE_SOURCE_DIR}/openssl/Configure VC-WIN32 no-shared no-autoalginit no-pinshared -static
+		COMMAND nmake
+		WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/openssl/build
+	)
+	add_custom_target(openssl DEPENDS ${CMAKE_BINARY_DIR}/openssl/build/libssl.lib ${CMAKE_BINARY_DIR}/openssl/build/libcrypto.lib)
+	target_link_libraries(xfer ${CMAKE_BINARY_DIR}/openssl/build/libssl.lib ${CMAKE_BINARY_DIR}/openssl/build/libcrypto.lib)
+else()
+	add_custom_command(
+		OUTPUT ${CMAKE_BINARY_DIR}/openssl/build/libssl.a ${CMAKE_BINARY_DIR}/openssl/build/libcrypto.a
+		#COMMAND ${CMAKE_SOURCE_DIR}/build_openssl.sh
+		COMMAND ${CMAKE_SOURCE_DIR}/openssl/Configure no-autoalginit no-shared no-pinshared -static
+		COMMAND make -j$(nproc)
+		WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/openssl/build
+	)
+	add_custom_target(openssl DEPENDS ${CMAKE_BINARY_DIR}/openssl/build/libssl.a ${CMAKE_BINARY_DIR}/openssl/build/libcrypto.a)
+	target_link_libraries(xfer ${CMAKE_BINARY_DIR}/openssl/build/libssl.a ${CMAKE_BINARY_DIR}/openssl/build/libcrypto.a)
+endif()
+
+#add_dependencies(xfer openssl)
+#target_dependencies(xfer openssl)
+
+add_dependencies(xfer openssl)
+
+target_include_directories(xfer PUBLIC openssl/include)
+	#${SSL_LIB}
+	#${CRYPTO_LIB}
+	#)
+
+
+
+
+
 #target_link_libraries(xfer ssl crypto)
-target_link_libraries(xfer OpenSSL::SSL OpenSSL::Crypto)
+#target_link_libraries(xfer OpenSSL::SSL OpenSSL::Crypto)
+#target_link_libraries(xfer libssl_static.a libcrypto_static.a)
 
 if(CMAKE_SYSTEM_NAME STREQUAL Windows)
 	target_link_libraries(xfer ws2_32)
