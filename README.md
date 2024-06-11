@@ -61,27 +61,39 @@ receiver to request a certain file.
 The transfer mode is always binary. No newline conversions are present. The headers use a single LF ('\n').
 
 
+### Binary installation
+
+#### Windows:
+    Go to the [releases page](https://github.com/DFPercush/xfer/releases) and download the latest xfer.exe.
+    Place it in a folder that is in your PATH, or add the folder to your PATH.
+
+#### Linux:
+    Binary distributions are not provided at this time. Please compile from source. (see below)
+
 
 ### COMPILING FROM SOURCE
 
 #### Linux:
- * Get the packages `gcc-c++` and `openssl-devel` from your package manager.
+ * Make sure you have the `cmake` package, as well as `gcc` or `gcc-c++`.
+ * The clang compiler is also a valid option if you which to tell CMake to use it.
 
- * `git clone https://github.com/DFPercush/xfer`
+```git clone --recursive --depth 1 https://github.com/DFPercush/xfer`
+cd xfer
+cmake -B /output/dir -S .
+cmake --build /output/dir --config Release```
 
- * `make`
-
- That's about it. I'm not in the habit of using configure scripts, so if 
-something is weird about your system that makes this not compile, post
-    an issue about it and we'll go from there.
 
 #### Windows / Visual studio:
-* First, you must install the [OpenSSL libraries](https://wiki.openssl.org/index.php/Compilation_and_Installation). That is a topic unto itself, but, as in my case, if you also want to build those from source, you will need a perl interpreter, as well as the [Netwide Assembler (NASM)](https://www.nasm.us/). I used [strawberry perl](http://www.strawberryperl.com/), which is free and requires no registration, but the official guide recommends [Active Perl](http://www.activestate.com/ActivePerl).
+You will need [CMake](https://cmake.org) to compile this project.
+In order to build OpenSSL, you will also need to install
+the [Netwide Assembler (NASM)](https://www.nasm.us/), and [strawberry perl](http://www.strawberryperl.com/).
+The commands `cmake`, `perl` and `nasm` should be in your PATH. 
 
-* This project expects the OpenSSL libraries to be in a parallel folder named `openssl-32` or `openssl-64`, i.e., if you clone this project into `Source\Repos\xfer`, there should be a `Source\Repos\openssl-64` with the files `libcrypto_static.lib` and `libssl_static.lib`. You can use the dynamic versions without the `_static` if you want, but you'll have to drag a couple of DLLs around wherever you put this.
-* If you have git for windows, clone this repo, or just download the zip file
-  * `git clone https://github.com/DFPercush/xfer`
+`git clone --recursive --depth 1 https://github.com/DFPercush/xfer`
 
+* Open `cmake-gui` from the start menu. Set the source folder to the xfer folder you just cloned.
+* The build/binary folder can be wherever you want the program to be built.
+* Click `Configure`, then `Generate`. Choose the Visual Studio version you have installed.
 * Open `xfer.sln` in visual studio.
 * Press `F7` or Build solution. I suggest using Release / x64 mode for better performance.
 
