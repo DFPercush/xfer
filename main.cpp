@@ -36,6 +36,7 @@
 #include <time.h>
 #include <string.h>
 #include <memory.h>
+#include <inttypes.h>
 
 #include <list>
 #include <string>
@@ -447,11 +448,7 @@ bool sendFiles(SOCKET sock, ProgramOptions op)
 					// Don't bottleneck on console system calls.
 					// It's been long enough.
 					clearLine();
-#ifdef _WIN32
-					printf("%I64d / %I64d", fpos, st.st_size);
-#else
-					printf("%ld / %ld", fpos, st.st_size);
-#endif
+					printf("%" PRIu64 " / %" PRIu64, (uint64_t)fpos, (uint64_t)st.st_size);
 					lastStatusTime = now;
 				}
 			}

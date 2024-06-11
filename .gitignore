@@ -7,3 +7,11 @@ x64/
 *.dll
 bin/
 obj/
+openssl/
+compile_commands.json
+CMakeLists.txt.user
+.cache/
+.vscode/
+*.suo
+*.user
+
