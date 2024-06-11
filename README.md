@@ -64,18 +64,18 @@ The transfer mode is always binary. No newline conversions are present. The head
 ### Binary installation
 
 #### Windows:
-    Go to the [releases page](https://github.com/DFPercush/xfer/releases) and download the latest xfer.exe.
-    Place it in a folder that is in your PATH, or add the folder to your PATH.
+Go to the [releases page](https://github.com/DFPercush/xfer/releases) and download the latest xfer.exe.
+Place it in a folder that is in your PATH, or add the folder to your PATH.
 
 #### Linux:
-    Binary distributions are not provided at this time. Please compile from source. (see below)
+Binary distributions are not provided at this time. Please compile from source. (see below)
 
 
 ### COMPILING FROM SOURCE
 
 #### Linux:
- * Make sure you have the `cmake` package, as well as `gcc` or `gcc-c++`.
- * The clang compiler is also a valid option if you which to tell CMake to use it.
+* Make sure you have the `cmake` package, as well as `gcc` or `gcc-c++`.
+* The clang compiler is also a valid option if you which to tell CMake to use it.
 
 ```
 git clone --recursive --depth 1 https://github.com/DFPercush/xfer`
