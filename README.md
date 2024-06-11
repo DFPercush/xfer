@@ -77,10 +77,10 @@ The transfer mode is always binary. No newline conversions are present. The head
  * Make sure you have the `cmake` package, as well as `gcc` or `gcc-c++`.
  * The clang compiler is also a valid option if you which to tell CMake to use it.
 
-```git clone --recursive --depth 1 https://github.com/DFPercush/xfer`
-cd xfer
-cmake -B /output/dir -S .
-cmake --build /output/dir --config Release```
+    git clone --recursive --depth 1 https://github.com/DFPercush/xfer`
+    cd xfer
+    cmake -B /output/dir -S .
+    cmake --build /output/dir --config Release
 
 
 #### Windows / Visual studio:
